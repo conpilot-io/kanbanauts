@@ -82,6 +82,38 @@ def test_template_matches_render_caller_workflow() -> None:
     assert template == render_caller_workflow()
 
 
+def test_caller_run_name_is_quoted() -> None:
+    """Unquoted `#${{ inputs.issue_number }}` is a YAML comment and drops the number."""
+    text = render_caller_workflow()
+    assert (
+        'run-name: "agent ${{ inputs.phase }} #${{ inputs.issue_number }}"'
+        in text
+    )
+
+
+def test_caller_issue_number_type_matches_lock_workflows() -> None:
+    """Reusable locks declare issue_number as number; caller must pass a number."""
+    caller = yaml.safe_load(render_caller_workflow())
+    # PyYAML 1.1 treats the key `on` as boolean True.
+    caller_on = caller.get("on") or caller.get(True) or {}
+    dispatch = caller_on["workflow_dispatch"]["inputs"]["issue_number"]
+    assert dispatch["type"] == "number"
+
+    for phase in PHASES:
+        for engine in ENGINES:
+            job_id = f"{phase}_{engine}"
+            lock_path = WORKFLOWS_DIR / f"agent-{phase}-{engine}.lock.yml"
+            lock = yaml.safe_load(lock_path.read_text(encoding="utf-8"))
+            on_block = lock.get("on") or lock.get(True) or {}
+            lock_input = on_block["workflow_call"]["inputs"]["issue_number"]
+            assert lock_input["type"] == "number", lock_path.name
+            # Caller passes the typed dispatch input through unchanged.
+            assert (
+                caller["jobs"][job_id]["with"]["issue_number"]
+                == "${{ inputs.issue_number }}"
+            )
+
+
 def test_caller_secrets_match_lock_workflow_call_secrets() -> None:
     """Every secret the caller passes must be declared on the reusable workflow."""
     caller = yaml.safe_load(render_caller_workflow())

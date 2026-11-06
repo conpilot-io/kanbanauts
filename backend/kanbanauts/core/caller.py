@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from textwrap import dedent
 
-CALLER_VERSION = 3
+CALLER_VERSION = 4
 CALLER_WORKFLOW_PATH = ".github/workflows/kanbanauts.yml"
 CONFIG_PATH = ".github/kanbanauts.yml"
 CENTRAL_REPO = "conpilot-io/kanbanauts"
@@ -61,14 +61,14 @@ def render_caller_workflow(*, version: int = CALLER_VERSION) -> str:
             # you know you need a newer caller version. Agent logic lives in
             # {CENTRAL_REPO} @{CENTRAL_REF} and updates when that tag moves.
             name: Kanbanauts
-            run-name: agent ${{{{ inputs.phase }}}} #${{{{ inputs.issue_number }}}}
+            run-name: "agent ${{{{ inputs.phase }}}} #${{{{ inputs.issue_number }}}}"
             on:
               workflow_dispatch:
                 inputs:
                   issue_number:
                     description: Issue number
                     required: true
-                    type: string
+                    type: number
                   phase:
                     description: Phase name (plan or doit)
                     required: true

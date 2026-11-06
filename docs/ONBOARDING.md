@@ -74,7 +74,7 @@ uvicorn kanbanauts.hosting.asgi:app --host 0.0.0.0 --port 8000
 ## Vendor: release and protect tags
 
 1. Make `conpilot-io/kanbanauts` **public** only after scrubbing ops docs and cleaning git history (see VENDOR_OPS.md).
-2. Tag ruleset on `v*`: restrict updates and deletions.
+2. Tag ruleset on `refs/tags/v*.*.*` (semver only; do not protect floating majors like `v1`): restrict updates and deletions.
 3. `git tag v1.0.0 && git push origin v1.0.0` — release workflow compiles, moves major tag `v1`, and calls `/admin/rollout` when the caller version changes.
 
 ## Self-hosters

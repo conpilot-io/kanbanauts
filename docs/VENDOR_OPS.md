@@ -55,4 +55,4 @@ Humans who set secrets need **Key Vault Secrets Officer**.
 
 ## Tag ruleset
 
-Settings → Rules → Rulesets → New tag ruleset `release-tags`, pattern `v*`, restrict updates and deletions, bypass: Repository admin.
+Settings → Rules → Rulesets → New tag ruleset `release-tags`, pattern `refs/tags/v*.*.*` (semver only — leave floating majors like `v1` unprotected so Release can move them), restrict updates and deletions, bypass: Repository admin.

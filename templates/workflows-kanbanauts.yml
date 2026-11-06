@@ -1,16 +1,16 @@
-# kanbanauts-caller: 3
+# kanbanauts-caller: 4
 # Managed by the Kanbanauts GitHub App. Do not edit by hand unless
 # you know you need a newer caller version. Agent logic lives in
 # conpilot-io/kanbanauts @v1 and updates when that tag moves.
 name: Kanbanauts
-run-name: agent ${{ inputs.phase }} #${{ inputs.issue_number }}
+run-name: "agent ${{ inputs.phase }} #${{ inputs.issue_number }}"
 on:
   workflow_dispatch:
     inputs:
       issue_number:
         description: Issue number
         required: true
-        type: string
+        type: number
       phase:
         description: Phase name (plan or doit)
         required: true

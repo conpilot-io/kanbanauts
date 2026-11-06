@@ -5,7 +5,12 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
-from kanbanauts.core.caller import CALLER_WORKFLOW_PATH, CONFIG_PATH, parse_caller_version
+from kanbanauts.core.caller import (
+    CALLER_VERSION,
+    CALLER_WORKFLOW_PATH,
+    CONFIG_PATH,
+    parse_caller_version,
+)
 from kanbanauts.core.onboarding import OnboardingService
 from kanbanauts.core.rollout import RolloutService
 
@@ -130,7 +135,7 @@ async def test_setup_opens_pr_with_both_files() -> None:
     assert result["ok"] is True
     assert CALLER_WORKFLOW_PATH in gh.files
     assert CONFIG_PATH in gh.files
-    assert parse_caller_version(gh.files[CALLER_WORKFLOW_PATH]) == 1
+    assert parse_caller_version(gh.files[CALLER_WORKFLOW_PATH]) == CALLER_VERSION
     assert "https://github.com/orgs/acme/projects/1" in gh.files[CONFIG_PATH]
     assert result.get("pr")
     assert "workflows" in (gh.token_permissions or {})
@@ -232,9 +237,9 @@ async def test_rollout_upgrades_old_caller() -> None:
     gh = FakeOnboardGitHub()
     gh.files[CALLER_WORKFLOW_PATH] = "# kanbanauts-caller: 0\nold\n"
     svc = RolloutService(github=gh)  # type: ignore[arg-type]
-    result = await svc.run(caller_version=1, dry_run=False)
+    result = await svc.run(caller_version=CALLER_VERSION, dry_run=False)
     assert result["upgraded"]
-    assert parse_caller_version(gh.files[CALLER_WORKFLOW_PATH]) == 1
+    assert parse_caller_version(gh.files[CALLER_WORKFLOW_PATH]) == CALLER_VERSION
 
 
 @pytest.mark.asyncio

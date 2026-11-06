@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from textwrap import dedent
 
-CALLER_VERSION = 1
+CALLER_VERSION = 2
 CALLER_WORKFLOW_PATH = ".github/workflows/kanbanauts.yml"
 CONFIG_PATH = ".github/kanbanauts.yml"
 CENTRAL_REPO = "conpilot-io/kanbanauts"
@@ -49,9 +49,6 @@ def render_caller_workflow(*, version: int = CALLER_VERSION) -> str:
                         issue_number: ${{{{ inputs.issue_number }}}}
                       secrets:
                         KANBANAUTS_AI_API_KEY: ${{{{ secrets.KANBANAUTS_AI_API_KEY }}}}
-                        ANTHROPIC_API_KEY: ${{{{ secrets.KANBANAUTS_AI_API_KEY }}}}
-                        OPENAI_API_KEY: ${{{{ secrets.KANBANAUTS_AI_API_KEY }}}}
-                        GEMINI_API_KEY: ${{{{ secrets.KANBANAUTS_AI_API_KEY }}}}
                     """
                 ).rstrip()
             )

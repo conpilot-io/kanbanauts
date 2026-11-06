@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from textwrap import dedent
 
-CALLER_VERSION = 2
+CALLER_VERSION = 3
 CALLER_WORKFLOW_PATH = ".github/workflows/kanbanauts.yml"
 CONFIG_PATH = ".github/kanbanauts.yml"
 CENTRAL_REPO = "conpilot-io/kanbanauts"
@@ -77,11 +77,12 @@ def render_caller_workflow(*, version: int = CALLER_VERSION) -> str:
               group: kanbanauts-${{{{ inputs.issue_number }}}}
               cancel-in-progress: false
             permissions:
-              contents: read
-              issues: read
-              pull-requests: read
               actions: read
+              checks: read
+              contents: write
               id-token: write
+              issues: write
+              pull-requests: write
 
             jobs:
             """

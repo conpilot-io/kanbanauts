@@ -1,4 +1,4 @@
-# kanbanauts-caller: 1
+# kanbanauts-caller: 3
 # Managed by the Kanbanauts GitHub App. Do not edit by hand unless
 # you know you need a newer caller version. Agent logic lives in
 # conpilot-io/kanbanauts @v1 and updates when that tag moves.
@@ -19,11 +19,12 @@ concurrency:
   group: kanbanauts-${{ inputs.issue_number }}
   cancel-in-progress: false
 permissions:
-  contents: read
-  issues: read
-  pull-requests: read
   actions: read
+  checks: read
+  contents: write
   id-token: write
+  issues: write
+  pull-requests: write
 
 jobs:
   plan_claude:
@@ -34,9 +35,6 @@ jobs:
       issue_number: ${{ inputs.issue_number }}
     secrets:
       KANBANAUTS_AI_API_KEY: ${{ secrets.KANBANAUTS_AI_API_KEY }}
-      ANTHROPIC_API_KEY: ${{ secrets.KANBANAUTS_AI_API_KEY }}
-      OPENAI_API_KEY: ${{ secrets.KANBANAUTS_AI_API_KEY }}
-      GEMINI_API_KEY: ${{ secrets.KANBANAUTS_AI_API_KEY }}
 
   plan_codex:
     if: >-
@@ -46,9 +44,6 @@ jobs:
       issue_number: ${{ inputs.issue_number }}
     secrets:
       KANBANAUTS_AI_API_KEY: ${{ secrets.KANBANAUTS_AI_API_KEY }}
-      ANTHROPIC_API_KEY: ${{ secrets.KANBANAUTS_AI_API_KEY }}
-      OPENAI_API_KEY: ${{ secrets.KANBANAUTS_AI_API_KEY }}
-      GEMINI_API_KEY: ${{ secrets.KANBANAUTS_AI_API_KEY }}
 
   plan_gemini:
     if: >-
@@ -58,9 +53,6 @@ jobs:
       issue_number: ${{ inputs.issue_number }}
     secrets:
       KANBANAUTS_AI_API_KEY: ${{ secrets.KANBANAUTS_AI_API_KEY }}
-      ANTHROPIC_API_KEY: ${{ secrets.KANBANAUTS_AI_API_KEY }}
-      OPENAI_API_KEY: ${{ secrets.KANBANAUTS_AI_API_KEY }}
-      GEMINI_API_KEY: ${{ secrets.KANBANAUTS_AI_API_KEY }}
 
   doit_claude:
     if: >-
@@ -70,9 +62,6 @@ jobs:
       issue_number: ${{ inputs.issue_number }}
     secrets:
       KANBANAUTS_AI_API_KEY: ${{ secrets.KANBANAUTS_AI_API_KEY }}
-      ANTHROPIC_API_KEY: ${{ secrets.KANBANAUTS_AI_API_KEY }}
-      OPENAI_API_KEY: ${{ secrets.KANBANAUTS_AI_API_KEY }}
-      GEMINI_API_KEY: ${{ secrets.KANBANAUTS_AI_API_KEY }}
 
   doit_codex:
     if: >-
@@ -82,9 +71,6 @@ jobs:
       issue_number: ${{ inputs.issue_number }}
     secrets:
       KANBANAUTS_AI_API_KEY: ${{ secrets.KANBANAUTS_AI_API_KEY }}
-      ANTHROPIC_API_KEY: ${{ secrets.KANBANAUTS_AI_API_KEY }}
-      OPENAI_API_KEY: ${{ secrets.KANBANAUTS_AI_API_KEY }}
-      GEMINI_API_KEY: ${{ secrets.KANBANAUTS_AI_API_KEY }}
 
   doit_gemini:
     if: >-
@@ -94,6 +80,3 @@ jobs:
       issue_number: ${{ inputs.issue_number }}
     secrets:
       KANBANAUTS_AI_API_KEY: ${{ secrets.KANBANAUTS_AI_API_KEY }}
-      ANTHROPIC_API_KEY: ${{ secrets.KANBANAUTS_AI_API_KEY }}
-      OPENAI_API_KEY: ${{ secrets.KANBANAUTS_AI_API_KEY }}
-      GEMINI_API_KEY: ${{ secrets.KANBANAUTS_AI_API_KEY }}

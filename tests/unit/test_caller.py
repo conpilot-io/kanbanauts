@@ -37,6 +37,51 @@ def test_render_caller_passes_only_kanbanauts_ai_api_key() -> None:
     assert "GEMINI_API_KEY:" not in text
 
 
+def test_caller_permissions_cover_reusable_lock_jobs() -> None:
+    """Caller GITHUB_TOKEN ceiling must cover every nested lock-file job."""
+    caller = yaml.safe_load(render_caller_workflow())
+    caller_perms: dict[str, str] = caller["permissions"]
+    required = {
+        "actions": "read",
+        "checks": "read",
+        "contents": "write",
+        "id-token": "write",
+        "issues": "write",
+        "pull-requests": "write",
+    }
+    for key, level in required.items():
+        assert caller_perms.get(key) == level, (
+            f"caller permissions[{key!r}] expected {level!r}, "
+            f"got {caller_perms.get(key)!r}"
+        )
+
+    rank = {"none": 0, "read": 1, "write": 2}
+    for phase in PHASES:
+        for engine in ENGINES:
+            lock_path = WORKFLOWS_DIR / f"agent-{phase}-{engine}.lock.yml"
+            lock = yaml.safe_load(lock_path.read_text(encoding="utf-8"))
+            for job_id, job in (lock.get("jobs") or {}).items():
+                job_perms = job.get("permissions") or {}
+                if not isinstance(job_perms, dict):
+                    continue
+                for key, level in job_perms.items():
+                    assert key in caller_perms, (
+                        f"{lock_path.name} job {job_id} needs {key}:{level} "
+                        f"but caller omits {key}"
+                    )
+                    assert rank[caller_perms[key]] >= rank[level], (
+                        f"{lock_path.name} job {job_id} needs {key}:{level} "
+                        f"but caller only grants {caller_perms[key]}"
+                    )
+
+
+def test_template_matches_render_caller_workflow() -> None:
+    template = (
+        REPO_ROOT / "templates" / "workflows-kanbanauts.yml"
+    ).read_text(encoding="utf-8")
+    assert template == render_caller_workflow()
+
+
 def test_caller_secrets_match_lock_workflow_call_secrets() -> None:
     """Every secret the caller passes must be declared on the reusable workflow."""
     caller = yaml.safe_load(render_caller_workflow())

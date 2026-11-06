@@ -61,6 +61,15 @@ def test_caller_secrets_match_lock_workflow_call_secrets() -> None:
             )
 
 
+def test_release_workflow_reads_caller_version() -> None:
+    text = (REPO_ROOT / ".github" / "workflows" / "release.yml").read_text(
+        encoding="utf-8"
+    )
+    assert "from kanbanauts.core.caller import CALLER_VERSION" in text
+    assert "--argjson ver \"$VER\"" in text
+    assert "--argjson ver 1" not in text
+
+
 def test_parse_caller_version_missing() -> None:
     assert parse_caller_version("name: x\n") is None
 

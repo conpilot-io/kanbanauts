@@ -57,9 +57,11 @@ jobs:
         env:
           KANBANAUTS_URL: ${{ vars.KANBANAUTS_URL || 'https://kanbanauts-fn.azurewebsites.net/api' }}
         run: |
+          source .venv/bin/activate
+          VER=$(python -c "from kanbanauts.core.caller import CALLER_VERSION; print(CALLER_VERSION)")
           OIDC=$(curl -sSL -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
             "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${KANBANAUTS_URL}" | jq -r .value)
-          BODY=$(jq -n --arg oidc "$OIDC" --argjson ver 1 \
+          BODY=$(jq -n --arg oidc "$OIDC" --argjson ver "$VER" \
             '{oidc_token:$oidc, caller_version:$ver, dry_run:false}')
           curl -sSL -X POST "${KANBANAUTS_URL}/admin/rollout" \
             -H "Content-Type: application/json" \

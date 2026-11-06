@@ -119,6 +119,9 @@ env:
 run-name: agent {phase} #${{{{ inputs.issue_number }}}}
 
 {safe_outputs}
+# Bundle imports into the lock file so cross-repo workflow_call does not
+# need a checkout of the callee's .github folder on the caller runner.
+inlined-imports: true
 strict: true
 ---
 

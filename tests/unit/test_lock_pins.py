@@ -45,15 +45,6 @@ def test_lock_pin_matches_ci_and_release_compile_sha() -> None:
         )
 
 
-def test_lock_files_do_not_mix_prompt_item_formats_with_old_runtime() -> None:
-    """The `author_file` prompt item needs gh-aw-actions >= v1.2.0."""
-    v120 = "4607d462dc213dbe54d02f77ec31215776fd5554"
-    for name, shas in _lock_pins().items():
-        text = (WORKFLOWS_DIR / name).read_text(encoding="utf-8")
-        if "author_file" in text:
-            assert shas == {v120}, f"{name} uses author_file with pins {shas}"
-
-
 def test_lock_files_allow_the_kanbanauts_bot() -> None:
     """The App dispatches the caller as `kanbanauts[bot]` (repo permission `none`).
 
@@ -63,3 +54,24 @@ def test_lock_files_allow_the_kanbanauts_bot() -> None:
     for name in _lock_pins():
         text = (WORKFLOWS_DIR / name).read_text(encoding="utf-8")
         assert 'GH_AW_ALLOWED_BOTS: "kanbanauts[bot]"' in text, name
+
+
+def test_sources_enable_inlined_imports() -> None:
+    """Cross-repo workflow_call cannot check out the callee's .github folder."""
+    sources = sorted(WORKFLOWS_DIR.glob("agent-*.md"))
+    assert sources, "no agent markdown sources found"
+    for path in sources:
+        text = path.read_text(encoding="utf-8")
+        assert "inlined-imports: true" in text, path.name
+
+
+def test_lock_files_have_no_runtime_imports_or_author_file() -> None:
+    """Runtime imports and author_file need files that only exist in kanbanauts.
+
+    Without inlined-imports, activation fails with:
+    Failed to resolve runtime import path .github/workflows/agent-plan-*.md
+    """
+    for name in _lock_pins():
+        text = (WORKFLOWS_DIR / name).read_text(encoding="utf-8")
+        assert "runtime-import" not in text, name
+        assert "author_file" not in text, name

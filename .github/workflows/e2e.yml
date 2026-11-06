@@ -1,0 +1,49 @@
+name: E2E sandbox (manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      issue_title:
+        description: "Title for the test issue"
+        default: "Kanbanauts e2e plan"
+        type: string
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Instructions
+        run: |
+          echo "This workflow is a checklist driver for a sandbox org."
+          echo "Full automated GraphQL move requires secrets:"
+          echo "  E2E_TOKEN, E2E_REPO, E2E_PROJECT_ID, E2E_STATUS_FIELD_ID, E2E_PLAN_OPTION_ID"
+          echo "See tests/e2e/README.md"
+      - name: Create issue and move to Plan
+        env:
+          GH_TOKEN: ${{ secrets.E2E_TOKEN }}
+          REPO: ${{ secrets.E2E_REPO }}
+          PROJECT_ID: ${{ secrets.E2E_PROJECT_ID }}
+          FIELD_ID: ${{ secrets.E2E_STATUS_FIELD_ID }}
+          PLAN_OPTION: ${{ secrets.E2E_PLAN_OPTION_ID }}
+          TITLE: ${{ inputs.issue_title }}
+        run: |
+          set -euo pipefail
+          if [ -z "${GH_TOKEN:-}" ] || [ -z "${REPO:-}" ]; then
+            echo "E2E secrets not configured; see tests/e2e/README.md"
+            exit 0
+          fi
+          ISSUE=$(gh issue create -R "$REPO" -t "$TITLE" -b "E2E: produce a short plan. No code change required." --json number,node_id)
+          NUM=$(echo "$ISSUE" | jq -r .number)
+          NID=$(echo "$ISSUE" | jq -r .node_id)
+          ITEM=$(gh api graphql -f query='
+            mutation($p:ID!,$c:ID!){
+              addProjectV2ItemById(input:{projectId:$p,contentId:$c}){item{id}}
+            }' -f p="$PROJECT_ID" -f c="$NID")
+          ITEM_ID=$(echo "$ITEM" | jq -r .data.addProjectV2ItemById.item.id)
+          gh api graphql -f query='
+            mutation($p:ID!,$i:ID!,$f:ID!,$o:String!){
+              updateProjectV2ItemFieldValue(input:{
+                projectId:$p,itemId:$i,fieldId:$f,value:{singleSelectOptionId:$o}
+              }){projectV2Item{id}}
+            }' -f p="$PROJECT_ID" -f i="$ITEM_ID" -f f="$FIELD_ID" -f o="$PLAN_OPTION"
+          echo "Created issue #$NUM and moved to Plan. Poll labels manually or wait for agent."

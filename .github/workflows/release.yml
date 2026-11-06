@@ -1,0 +1,66 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install tools
+        run: |
+          python -m venv .venv
+          source .venv/bin/activate
+          pip install -e ".[dev]"
+          gh extension install github/gh-aw
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Generate and compile workflows
+        run: |
+          source .venv/bin/activate
+          python scripts/gen-workflows.py
+          SHA=221ba4f4319de6b8e809d1a15528b3ae6a818aa5
+          gh aw compile \
+            agent-plan-claude agent-plan-codex agent-plan-gemini \
+            agent-doit-claude agent-doit-codex agent-doit-gemini \
+            --action-mode action --action-tag "$SHA" --approve
+          git diff --exit-code -- .github/workflows || {
+            echo "::error::Generated workflows or lock files are out of date. Run scripts/gen-workflows.py and gh aw compile, then commit."
+            exit 1
+          }
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Move major tag
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          MAJOR="${TAG%%.*}"
+          git tag -f "$MAJOR" "$TAG"
+          git push -f origin "refs/tags/$MAJOR"
+
+      - name: Call rollout (caller upgrades)
+        env:
+          KANBANAUTS_URL: ${{ vars.KANBANAUTS_URL || 'https://kanbanauts-fn.azurewebsites.net/api' }}
+        run: |
+          OIDC=$(curl -sSL -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${KANBANAUTS_URL}" | jq -r .value)
+          BODY=$(jq -n --arg oidc "$OIDC" --argjson ver 1 \
+            '{oidc_token:$oidc, caller_version:$ver, dry_run:false}')
+          curl -sSL -X POST "${KANBANAUTS_URL}/admin/rollout" \
+            -H "Content-Type: application/json" \
+            -d "$BODY"

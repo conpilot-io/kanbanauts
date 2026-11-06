@@ -1,0 +1,81 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: |
+          python -m venv .venv
+          source .venv/bin/activate
+          pip install -e ".[dev]"
+      - name: Ruff
+        run: |
+          source .venv/bin/activate
+          ruff check backend tests scripts
+      - name: Pytest
+        run: |
+          source .venv/bin/activate
+          pytest -q
+      - name: Mypy
+        run: |
+          source .venv/bin/activate
+          mypy --config-file mypy.ini . | mypy-baseline filter || mypy --config-file mypy.ini backend/kanbanauts
+      - name: No private Azure identifiers in tracked files
+        run: |
+          # Pattern built in parts so this workflow file does not match itself.
+          PAT1='3a970f3b-'
+          PAT2='francois-ai-playground|francois-playground-kv'
+          PAT3='francois-ai-resource|playgroundsac'
+          if git grep -nE "${PAT1}|${PAT2}|${PAT3}" -- \
+            ':!.git' ':!docs/SPIKES.md' ':!.github/workflows/ci.yml' 2>/dev/null; then
+            echo "::error::Private Azure identifiers must not appear in tracked files"
+            exit 1
+          fi
+          if git grep -nE 'BEGIN (RSA )?PRIVATE KEY' -- ':!.git' 2>/dev/null; then
+            echo "::error::PEM private key material must not appear in tracked files"
+            exit 1
+          fi
+
+  workflows:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install gh-aw
+        run: gh extension install github/gh-aw
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - name: Drift check (generated sources)
+        run: |
+          python scripts/gen-workflows.py
+          git diff --exit-code -- .github/workflows/agent-*.md
+      - name: Compile lock files
+        continue-on-error: false
+        run: |
+          SHA=221ba4f4319de6b8e809d1a15528b3ae6a818aa5
+          gh aw compile \
+            agent-plan-claude agent-plan-codex agent-plan-gemini \
+            agent-doit-claude agent-doit-codex agent-doit-gemini \
+            --action-mode action --action-tag "$SHA" --approve \
+          || gh aw compile \
+            agent-plan-claude agent-plan-codex agent-plan-gemini \
+            agent-doit-claude agent-doit-codex agent-doit-gemini \
+            --allow-action-refs --approve
+          git diff --exit-code -- .github/workflows/*.lock.yml || {
+            echo "::error::Lock files out of date. Compile and commit them."
+            exit 1
+          }
+        env:
+          GH_TOKEN: ${{ github.token }}

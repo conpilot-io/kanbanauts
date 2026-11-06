@@ -1,0 +1,1 @@
+"""Host-agnostic Kanbanauts core."""

@@ -1,0 +1,24 @@
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.python-version
+dist/
+*.egg-info/
+.DS_Store
+*.pem
+local.settings.json
+.azure/
+.github/aw/
+# Ignore local lock experiments; committed reusable locks are under .github/workflows/
+*.lock.yml
+!.github/workflows/*.lock.yml
+.env
+.coverage
+htmlcov/
+# Vendor-only Azure names — keep local, never publish
+setup.md
+ops/
+Design.md

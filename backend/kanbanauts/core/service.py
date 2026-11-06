@@ -840,7 +840,7 @@ class KanbanautsService:
         return HttpResponse.json(200, {"ok": True, "skip": False})
 
     async def handle_rollout(self, request: HttpRequest) -> HttpResponse:
-        from kanbanauts.core.rollout import RolloutService
+        from kanbanauts.core.rollout import RolloutService, StaleDeploymentError
 
         try:
             body = json.loads(request.body.decode("utf-8") or "{}")
@@ -858,7 +858,12 @@ class KanbanautsService:
         dry_run = bool(body.get("dry_run", False))
         target_version = int(body.get("caller_version") or 1)
         rollout = RolloutService(github=self.github)
-        result = await rollout.run(caller_version=target_version, dry_run=dry_run)
+        try:
+            result = await rollout.run(
+                caller_version=target_version, dry_run=dry_run
+            )
+        except StaleDeploymentError as exc:
+            return HttpResponse.json(409, {"ok": False, "error": str(exc)})
         return HttpResponse.json(200, {"ok": True, **result})
 
 

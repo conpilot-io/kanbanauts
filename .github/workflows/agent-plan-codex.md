@@ -12,6 +12,9 @@ on:
     secrets:
       KANBANAUTS_AI_API_KEY:
         required: false
+  # The Kanbanauts GitHub App dispatches the caller. gh-aw's membership check
+  # sees that bot with repository permission "none" and would skip the run.
+  bots: ["kanbanauts[bot]"]
 
 permissions:
   contents: read

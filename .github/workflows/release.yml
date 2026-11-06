@@ -63,6 +63,6 @@ jobs:
             "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${KANBANAUTS_URL}" | jq -r .value)
           BODY=$(jq -n --arg oidc "$OIDC" --argjson ver "$VER" \
             '{oidc_token:$oidc, caller_version:$ver, dry_run:false}')
-          curl -sSL -X POST "${KANBANAUTS_URL}/admin/rollout" \
+          curl -sSL --fail-with-body -X POST "${KANBANAUTS_URL}/admin/rollout" \
             -H "Content-Type: application/json" \
             -d "$BODY"

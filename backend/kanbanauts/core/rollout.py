@@ -20,6 +20,10 @@ UPGRADE_BRANCH = "kanbanauts/upgrade-caller"
 UPGRADE_PR_TITLE = "Upgrade Kanbanauts caller"
 
 
+class StaleDeploymentError(RuntimeError):
+    """The deployed function is older than the release that asked for a rollout."""
+
+
 class RolloutService:
     def __init__(self, github: GitHubApp) -> None:
         self.github = github
@@ -27,6 +31,15 @@ class RolloutService:
     async def run(
         self, *, caller_version: int = CALLER_VERSION, dry_run: bool = False
     ) -> dict[str, Any]:
+        # This process renders the caller from its own bundled template. If the
+        # release asks for a newer version than this code has, it would write
+        # an old template under a new version header and block the real upgrade.
+        if caller_version > CALLER_VERSION:
+            raise StaleDeploymentError(
+                f"release requests caller version {caller_version} but the "
+                f"deployed function only has version {CALLER_VERSION}; "
+                "run scripts/publish-function.sh and re-run the release"
+            )
         installations = await self.github.list_installations()
         upgraded: list[dict[str, Any]] = []
         skipped: list[dict[str, Any]] = []

@@ -53,6 +53,27 @@ az deployment group create \
 Grant the Function identity **Key Vault Secrets User** on `<key-vault>`.
 Humans who set secrets need **Key Vault Secrets Officer**.
 
+## Release checklist (every release)
+
+The release workflow calls the **deployed** Function (`/admin/rollout`). That
+Function renders the customer caller from its own bundled template. If you tag
+before you publish, customers get an old template under a new version number
+and their runs end in "Startup failure".
+
+1. Merge to `main` and wait for CI to pass.
+2. Publish the Function: `./scripts/publish-function.sh kanbanauts-fn`.
+3. Tag and push: `git tag vX.Y.Z && git push origin vX.Y.Z`.
+4. Check the Release run. The rollout step fails with HTTP 409 if the deployed
+   Function is older than the release. In that case, do step 2 and re-run the
+   Release job.
+5. Merge the "Upgrade Kanbanauts caller" PR in each customer repo.
+6. Move a test item to **Plan** and check that nested jobs
+   (`plan_<engine> / activation` and so on) appear.
+
+Note: the rollout skips repos that are already at the target caller version.
+If a wrong file was merged under the right version number, copy
+`templates/workflows-kanbanauts.yml` into the customer repo by hand.
+
 ## Tag ruleset
 
 Settings → Rules → Rulesets → New tag ruleset `release-tags`, pattern `refs/tags/v*.*.*` (semver only — leave floating majors like `v1` unprotected so Release can move them), restrict updates and deletions, bypass: Repository admin.

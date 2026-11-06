@@ -52,3 +52,14 @@ def test_lock_files_do_not_mix_prompt_item_formats_with_old_runtime() -> None:
         text = (WORKFLOWS_DIR / name).read_text(encoding="utf-8")
         if "author_file" in text:
             assert shas == {v120}, f"{name} uses author_file with pins {shas}"
+
+
+def test_lock_files_allow_the_kanbanauts_bot() -> None:
+    """The App dispatches the caller as `kanbanauts[bot]` (repo permission `none`).
+
+    Without `on.bots`, gh-aw's membership check sets `activated=false`, every
+    job after `pre_activation` is skipped, and the run still shows green.
+    """
+    for name in _lock_pins():
+        text = (WORKFLOWS_DIR / name).read_text(encoding="utf-8")
+        assert 'GH_AW_ALLOWED_BOTS: "kanbanauts[bot]"' in text, name

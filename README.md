@@ -32,6 +32,8 @@ pytest -q
 ruff check backend tests scripts
 mypy --config-file mypy.ini . | mypy-baseline filter
 python scripts/gen-workflows.py
+# Match the gh-aw pin in .github/workflows/ci.yml (currently v1.2.0)
+gh extension install github/gh-aw --pin v1.2.0
 ```
 
 Run the ASGI app:

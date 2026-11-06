@@ -9,11 +9,14 @@ Kanbanauts agent workflows now live under [`.github/workflows/`](../.github/work
 
 Customers do **not** copy these files. The App opens a setup PR with the static caller. Agent logic runs from `conpilot-io/kanbanauts@v1`.
 
-To regenerate after a template change:
+To regenerate after a template change, use the same gh-aw version as CI
+(`v1.2.0`, pinned in `.github/workflows/ci.yml` and `release.yml`):
 
 ```bash
+gh extension install github/gh-aw --pin v1.2.0
 python scripts/gen-workflows.py
+SHA=221ba4f4319de6b8e809d1a15528b3ae6a818aa5
 gh aw compile agent-plan-claude agent-plan-codex agent-plan-gemini \
   agent-doit-claude agent-doit-codex agent-doit-gemini \
-  --force-refresh-action-pins --approve
+  --action-mode action --action-tag "$SHA" --approve
 ```

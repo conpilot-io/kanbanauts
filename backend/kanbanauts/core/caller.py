@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from textwrap import dedent
 
-CALLER_VERSION = 4
+CALLER_VERSION = 5
 CALLER_WORKFLOW_PATH = ".github/workflows/kanbanauts.yml"
 CONFIG_PATH = ".github/kanbanauts.yml"
 CENTRAL_REPO = "conpilot-io/kanbanauts"
@@ -46,7 +46,7 @@ def render_caller_workflow(*, version: int = CALLER_VERSION) -> str:
                         inputs.phase == '{phase}' && {engine_if}
                       uses: {CENTRAL_REPO}/.github/workflows/{lock}@{CENTRAL_REF}
                       with:
-                        issue_number: ${{{{ inputs.issue_number }}}}
+                        issue_number: ${{{{ fromJSON(inputs.issue_number) }}}}
                       secrets:
                         KANBANAUTS_AI_API_KEY: ${{{{ secrets.KANBANAUTS_AI_API_KEY }}}}
                     """

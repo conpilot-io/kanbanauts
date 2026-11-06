@@ -107,10 +107,12 @@ def test_caller_issue_number_type_matches_lock_workflows() -> None:
             on_block = lock.get("on") or lock.get(True) or {}
             lock_input = on_block["workflow_call"]["inputs"]["issue_number"]
             assert lock_input["type"] == "number", lock_path.name
-            # Caller passes the typed dispatch input through unchanged.
+            # A workflow_dispatch `number` input reaches `with:` as a string.
+            # GitHub then rejects the reusable call (run fails with zero jobs
+            # and no error), so the caller must convert it with fromJSON().
             assert (
                 caller["jobs"][job_id]["with"]["issue_number"]
-                == "${{ inputs.issue_number }}"
+                == "${{ fromJSON(inputs.issue_number) }}"
             )
 
 

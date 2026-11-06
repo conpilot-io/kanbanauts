@@ -1,0 +1,54 @@
+from __future__ import annotations
+
+import re
+from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+WORKFLOWS_DIR = REPO_ROOT / ".github" / "workflows"
+
+SETUP_PIN = re.compile(r"github/gh-aw-actions/setup@([0-9a-f]{40})")
+SHA_VAR = re.compile(r"^\s*SHA=([0-9a-f]{40})\s*$", re.MULTILINE)
+
+
+def _lock_pins() -> dict[str, set[str]]:
+    pins: dict[str, set[str]] = {}
+    for path in sorted(WORKFLOWS_DIR.glob("agent-*.lock.yml")):
+        pins[path.name] = set(
+            SETUP_PIN.findall(path.read_text(encoding="utf-8"))
+        )
+    return pins
+
+
+def test_lock_files_use_one_gh_aw_actions_pin() -> None:
+    """All locks must use the same gh-aw-actions/setup commit."""
+    pins = _lock_pins()
+    assert pins, "no lock files found"
+    for name, shas in pins.items():
+        assert len(shas) == 1, f"{name} has pins: {sorted(shas)}"
+    assert len({next(iter(s)) for s in pins.values()}) == 1
+
+
+def test_lock_pin_matches_ci_and_release_compile_sha() -> None:
+    """Compiler (gh-aw CLI) and runtime (gh-aw-actions) must be the same release.
+
+    A lock compiled by gh-aw v1.2.0 but pinned to the v1.0.1 setup action made
+    the `activation` job fail with
+    `Prompt render item must specify exactly one content_env or file`.
+    """
+    lock_sha = next(iter(next(iter(_lock_pins().values()))))
+    for workflow in ("ci.yml", "release.yml"):
+        text = (WORKFLOWS_DIR / workflow).read_text(encoding="utf-8")
+        found = SHA_VAR.findall(text)
+        assert found, f"{workflow} has no SHA= compile pin"
+        assert set(found) == {lock_sha}, (
+            f"{workflow} compile SHA {found} != lock pin {lock_sha}"
+        )
+
+
+def test_lock_files_do_not_mix_prompt_item_formats_with_old_runtime() -> None:
+    """The `author_file` prompt item needs gh-aw-actions >= v1.2.0."""
+    v120 = "4607d462dc213dbe54d02f77ec31215776fd5554"
+    for name, shas in _lock_pins().items():
+        text = (WORKFLOWS_DIR / name).read_text(encoding="utf-8")
+        if "author_file" in text:
+            assert shas == {v120}, f"{name} uses author_file with pins {shas}"

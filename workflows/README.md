@@ -15,7 +15,7 @@ To regenerate after a template change, use the same gh-aw version as CI
 ```bash
 gh extension install github/gh-aw --pin v1.2.0
 python scripts/gen-workflows.py
-SHA=221ba4f4319de6b8e809d1a15528b3ae6a818aa5
+SHA=4607d462dc213dbe54d02f77ec31215776fd5554
 gh aw compile agent-plan-claude agent-plan-codex agent-plan-gemini \
   agent-doit-claude agent-doit-codex agent-doit-gemini \
   --action-mode action --action-tag "$SHA" --approve

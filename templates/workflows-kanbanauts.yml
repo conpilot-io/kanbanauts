@@ -1,4 +1,4 @@
-# kanbanauts-caller: 4
+# kanbanauts-caller: 5
 # Managed by the Kanbanauts GitHub App. Do not edit by hand unless
 # you know you need a newer caller version. Agent logic lives in
 # conpilot-io/kanbanauts @v1 and updates when that tag moves.
@@ -32,7 +32,7 @@ jobs:
       inputs.phase == 'plan' && (vars.KANBANAUTS_ENGINE || 'claude') == 'claude'
     uses: conpilot-io/kanbanauts/.github/workflows/agent-plan-claude.lock.yml@v1
     with:
-      issue_number: ${{ inputs.issue_number }}
+      issue_number: ${{ fromJSON(inputs.issue_number) }}
     secrets:
       KANBANAUTS_AI_API_KEY: ${{ secrets.KANBANAUTS_AI_API_KEY }}
 
@@ -41,7 +41,7 @@ jobs:
       inputs.phase == 'plan' && vars.KANBANAUTS_ENGINE == 'codex'
     uses: conpilot-io/kanbanauts/.github/workflows/agent-plan-codex.lock.yml@v1
     with:
-      issue_number: ${{ inputs.issue_number }}
+      issue_number: ${{ fromJSON(inputs.issue_number) }}
     secrets:
       KANBANAUTS_AI_API_KEY: ${{ secrets.KANBANAUTS_AI_API_KEY }}
 
@@ -50,7 +50,7 @@ jobs:
       inputs.phase == 'plan' && vars.KANBANAUTS_ENGINE == 'gemini'
     uses: conpilot-io/kanbanauts/.github/workflows/agent-plan-gemini.lock.yml@v1
     with:
-      issue_number: ${{ inputs.issue_number }}
+      issue_number: ${{ fromJSON(inputs.issue_number) }}
     secrets:
       KANBANAUTS_AI_API_KEY: ${{ secrets.KANBANAUTS_AI_API_KEY }}
 
@@ -59,7 +59,7 @@ jobs:
       inputs.phase == 'doit' && (vars.KANBANAUTS_ENGINE || 'claude') == 'claude'
     uses: conpilot-io/kanbanauts/.github/workflows/agent-doit-claude.lock.yml@v1
     with:
-      issue_number: ${{ inputs.issue_number }}
+      issue_number: ${{ fromJSON(inputs.issue_number) }}
     secrets:
       KANBANAUTS_AI_API_KEY: ${{ secrets.KANBANAUTS_AI_API_KEY }}
 
@@ -68,7 +68,7 @@ jobs:
       inputs.phase == 'doit' && vars.KANBANAUTS_ENGINE == 'codex'
     uses: conpilot-io/kanbanauts/.github/workflows/agent-doit-codex.lock.yml@v1
     with:
-      issue_number: ${{ inputs.issue_number }}
+      issue_number: ${{ fromJSON(inputs.issue_number) }}
     secrets:
       KANBANAUTS_AI_API_KEY: ${{ secrets.KANBANAUTS_AI_API_KEY }}
 
@@ -77,6 +77,6 @@ jobs:
       inputs.phase == 'doit' && vars.KANBANAUTS_ENGINE == 'gemini'
     uses: conpilot-io/kanbanauts/.github/workflows/agent-doit-gemini.lock.yml@v1
     with:
-      issue_number: ${{ inputs.issue_number }}
+      issue_number: ${{ fromJSON(inputs.issue_number) }}
     secrets:
       KANBANAUTS_AI_API_KEY: ${{ secrets.KANBANAUTS_AI_API_KEY }}

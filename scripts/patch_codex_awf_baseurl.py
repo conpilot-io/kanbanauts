@@ -2,7 +2,7 @@
 """Post-compile patch: preserve Azure OpenAI base paths for Codex AWF configs.
 
 gh-aw emits apiProxy.targets.openai.host from OPENAI_BASE_URL. When that env
-value is a runtime expression (${{ vars.KANBANAUTS_AI_BASE_URL }}), the
+value is a runtime expression (${{ vars.KANBANAUTS_AI_BASE_URL }}...), the
 compiler cannot extract /openai/v1 as basePath. AWF then forwards
 POST /responses to https://<resource>.openai.azure.com/responses (404).
 
@@ -12,6 +12,7 @@ runner from OPENAI_BASE_URL (see gh-aw-firewall apiProxy.targets.openai.baseUrlE
 
 from __future__ import annotations
 
+import re
 import sys
 from pathlib import Path
 
@@ -19,11 +20,15 @@ ROOT = Path(__file__).resolve().parents[1]
 WORKFLOWS = ROOT / ".github" / "workflows"
 
 # Escaped JSON inside printf '...awf-config...' strings in lock YAML.
-OLD_OPENAI_TARGET = (
-    '\\"openai\\":{\\"host\\":\\"${{ vars.KANBANAUTS_AI_BASE_URL }}\\"}'
+# Match any openai host target (bare var or var || default). Use non-greedy
+# .*? so a trailing \ before the closing \" is not swallowed by [^"].
+OPENAI_HOST_TARGET_RE = re.compile(
+    r'\\"openai\\":\{\\"host\\":\\".*?\\"\}'
 )
 NEW_OPENAI_TARGET = '\\"openai\\":{\\"baseUrlEnv\\":\\"OPENAI_BASE_URL\\"}'
 
+# Legacy bare expression (pre-default). Compile with engine-codex.md already
+# emits the || default; keep this replace for older lock snapshots.
 OLD_OPENAI_BASE_URL = "OPENAI_BASE_URL: ${{ vars.KANBANAUTS_AI_BASE_URL }}"
 NEW_OPENAI_BASE_URL = (
     "OPENAI_BASE_URL: "
@@ -38,8 +43,7 @@ CODEX_LOCKS = (
 
 def patch_text(text: str) -> tuple[str, int, int]:
     """Return patched text and counts of openai-target / base-url replacements."""
-    target_count = text.count(OLD_OPENAI_TARGET)
-    text = text.replace(OLD_OPENAI_TARGET, NEW_OPENAI_TARGET)
+    text, target_count = OPENAI_HOST_TARGET_RE.subn(NEW_OPENAI_TARGET, text)
     # Idempotent if already patched to the default expression.
     base_count = text.count(OLD_OPENAI_BASE_URL)
     text = text.replace(OLD_OPENAI_BASE_URL, NEW_OPENAI_BASE_URL)
@@ -59,9 +63,10 @@ def assert_codex_locks_patched(workflows_dir: Path = WORKFLOWS) -> None:
     for name in CODEX_LOCKS:
         path = workflows_dir / name
         text = path.read_text(encoding="utf-8")
-        if OLD_OPENAI_TARGET in text:
+        leftover = OPENAI_HOST_TARGET_RE.findall(text)
+        if leftover:
             raise AssertionError(
-                f"{name} still has openai host=${{{{ vars.KANBANAUTS_AI_BASE_URL }}}}"
+                f"{name} still has openai host target(s): {leftover[:2]}"
             )
         if NEW_OPENAI_TARGET not in text:
             raise AssertionError(

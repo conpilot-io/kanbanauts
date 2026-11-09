@@ -24,24 +24,41 @@ def _load_patch_module() -> ModuleType:
 
 patch = _load_patch_module()
 
+# Escaped host forms gh-aw may emit into lock printf JSON.
+HOST_BARE = r'\"openai\":{\"host\":\"${{ vars.KANBANAUTS_AI_BASE_URL }}\"}'
+HOST_WITH_DEFAULT = (
+    r'\"openai\":{\"host\":\"${{ vars.KANBANAUTS_AI_BASE_URL || '
+    r"'https://api.openai.com/v1' }}\"}"
+)
 
-def test_patch_text_rewrites_host_target_and_base_url() -> None:
-    sample = (
-        f"printf '{{{patch.OLD_OPENAI_TARGET}}}'\n"
-        f"          {patch.OLD_OPENAI_BASE_URL}\n"
-    )
+
+def test_patch_text_rewrites_bare_host_target() -> None:
+    sample = f"printf '{{{HOST_BARE}}}'\n          {patch.OLD_OPENAI_BASE_URL}\n"
     patched, targets, bases = patch.patch_text(sample)
     assert targets == 1
     assert bases == 1
     assert patch.NEW_OPENAI_TARGET in patched
-    assert patch.OLD_OPENAI_TARGET not in patched
+    assert HOST_BARE not in patched
     assert patch.NEW_OPENAI_BASE_URL in patched
-    assert patch.OLD_OPENAI_BASE_URL not in patched
+
+
+def test_patch_text_rewrites_host_target_with_default_expression() -> None:
+    """Fresh compile after engine-codex default embeds the || expression in host."""
+    sample = (
+        f"printf '{{{HOST_WITH_DEFAULT}}}'\n"
+        f"          {patch.NEW_OPENAI_BASE_URL}\n"
+    )
+    patched, targets, bases = patch.patch_text(sample)
+    assert targets == 1
+    assert bases == 0
+    assert patch.NEW_OPENAI_TARGET in patched
+    assert HOST_WITH_DEFAULT not in patched
+    assert patch.NEW_OPENAI_BASE_URL in patched
 
 
 def test_patch_text_is_idempotent() -> None:
     once, t1, b1 = patch.patch_text(
-        f"x{patch.OLD_OPENAI_TARGET}y\n{patch.OLD_OPENAI_BASE_URL}\n"
+        f"x{HOST_WITH_DEFAULT}y\n{patch.OLD_OPENAI_BASE_URL}\n"
     )
     twice, t2, b2 = patch.patch_text(once)
     assert t1 == 1 and b1 == 1
@@ -71,7 +88,7 @@ def test_ci_and_release_run_codex_awf_patch() -> None:
 def test_assert_codex_locks_patched_detects_host_only(tmp_path: Path) -> None:
     bad = tmp_path / "agent-plan-codex.lock.yml"
     bad.write_text(
-        f"printf '{patch.OLD_OPENAI_TARGET}'\n{patch.OLD_OPENAI_BASE_URL}\n",
+        f"printf '{HOST_WITH_DEFAULT}'\n{patch.OLD_OPENAI_BASE_URL}\n",
         encoding="utf-8",
     )
     other = tmp_path / "agent-doit-codex.lock.yml"

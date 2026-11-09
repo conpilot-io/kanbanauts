@@ -35,11 +35,17 @@ Call `kanban_report` with status `succeeded` (map from ready), `blocked`, `no_co
     },
     "doit": {
         "name": "Kanbanauts — implement and open PR",
-        "description": "Implement a plan, open a draft PR",
+        "description": "Implement a plan, open or update a draft PR",
         "timeout": 60,
         "max_turns": 80,
         "tools_bash": '["*"]',
         "edit": "true",
+        "extra_imports": ["shared/kanban-checkout-existing-pr.md"],
+        "checkout": """\
+checkout:
+  fetch: ["*"]
+  fetch-depth: 0
+""",
         "safe_outputs": """\
 safe-outputs:
   add-comment:
@@ -52,6 +58,8 @@ safe-outputs:
     github-token: ${{ steps.kanban.outputs.token }}
   push-to-pull-request-branch:
     max: 1
+    target: "*"
+    fallback-as-pull-request: false
     github-token: ${{ steps.kanban.outputs.token }}
   create-issue: false
 """,
@@ -60,7 +68,8 @@ safe-outputs:
 
 If `KANBANAUTS_SKIP` is `1`, do nothing and exit.
 Otherwise implement the plan. Follow the imported prompt.
-Use `create_pull_request` for a new branch + draft PR.
+When `KANBANAUTS_EXISTING_PR` is set, push to that pull request.
+Otherwise use `create_pull_request` for a new branch + draft PR.
 Call `kanban_report` with status `succeeded`, `blocked`, or `failed`.
 """,
         "prompt": "shared/prompts/doit.md",
@@ -144,7 +153,7 @@ imports:
   - shared/kanban-report.md
   - shared/kanban-preflight.md
   - shared/kanban-setup-check.md
-  - shared/prompts/comment-style.md
+{extra_imports}  - shared/prompts/comment-style.md
   - {prompt}
 
 tools:
@@ -162,7 +171,7 @@ run-name: agent {phase} #${{{{ inputs.issue_number }}}}
 concurrency:
   job-discriminator: ${{{{ inputs.issue_number }}}}
 
-{safe_outputs}
+{checkout}{safe_outputs}
 # Bundle imports into the lock file so cross-repo workflow_call does not
 # need a checkout of the callee's .github folder on the caller runner.
 inlined-imports: true
@@ -185,6 +194,16 @@ def main() -> None:
             tools_bash = (
                 '["*"]' if engine == "codex" else str(meta["tools_bash"])
             )
+            extra_raw = meta.get("extra_imports", [])
+            extra_list = (
+                [str(item) for item in extra_raw]
+                if isinstance(extra_raw, list)
+                else []
+            )
+            extra_imports = "".join(f"  - {item}\n" for item in extra_list)
+            checkout = str(meta.get("checkout") or "").rstrip()
+            if checkout:
+                checkout = checkout + "\n"
             text = HEADER.format(
                 name=meta["name"],
                 description=meta["description"],
@@ -197,6 +216,8 @@ def main() -> None:
                 phase=phase,
                 safe_outputs=safe_outputs,
                 body=body,
+                extra_imports=extra_imports,
+                checkout=checkout,
             )
             path.write_text(text)
             written.append(path)

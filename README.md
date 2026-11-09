@@ -11,7 +11,7 @@ Comment on an issue. The issue does not need to be on a Project board. Only a us
 | Command | Effect |
 |---|---|
 | `/ai plan` | Start or run planning again. Comment on the issue, not on the pull request. |
-| `/ai doit` | Start implementation. `/ai do` is the same command. Comment on the issue, not on the pull request. |
+| `/ai doit` | Start implementation. `/ai do` is the same command. Comment on the issue, not on the pull request. When the issue already has an open same-repo pull request that closes it, the agent commits to that pull request. Otherwise it opens a new draft. |
 | `/ai review` | Review the linked draft pull request. The agent posts comments only. It does not approve and it does not merge. |
 | `/ai retry` | Run a phase again. Add the phase name (`/ai retry doit`). With no name, the phase is `plan`. |
 | `/ai status` | Post the current agent state and the active runs. |

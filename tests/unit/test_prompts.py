@@ -42,6 +42,29 @@ def test_doit_prompt_stops_on_unanswered_plan_question() -> None:
     assert "status=blocked" in text
 
 
+def test_doit_prompt_reuses_existing_pr() -> None:
+    text = (PROMPTS_DIR / "doit.md").read_text(encoding="utf-8")
+    assert "KANBANAUTS_EXISTING_PR" in text
+    assert "push_to_pull_request_branch" in text
+    assert "Do not call `create_pull_request`" in text
+    assert "Do NOT run `git commit` or `git push`" in text
+    assert "Omit `pr_number`" in text
+    assert "pass the numeric `pr_number`" in text
+
+
+def test_doit_sources_import_existing_pr_checkout() -> None:
+    for engine in ("claude", "codex", "gemini"):
+        text = (WORKFLOWS_DIR / f"agent-doit-{engine}.md").read_text(encoding="utf-8")
+        assert "shared/kanban-checkout-existing-pr.md" in text, engine
+        assert "fallback-as-pull-request: false" in text, engine
+        assert 'target: "*"' in text, engine
+        assert 'fetch: ["*"]' in text, engine
+    for path in WORKFLOWS_DIR.glob("agent-plan-*.md"):
+        assert "kanban-checkout-existing-pr.md" not in path.read_text(encoding="utf-8")
+    for path in WORKFLOWS_DIR.glob("agent-review-*.md"):
+        assert "kanban-checkout-existing-pr.md" not in path.read_text(encoding="utf-8")
+
+
 def test_phase_prompts_require_next_step() -> None:
     for name in ("plan.md", "doit.md", "review.md"):
         text = (PROMPTS_DIR / name).read_text(encoding="utf-8")

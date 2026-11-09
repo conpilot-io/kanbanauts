@@ -4,8 +4,10 @@ engine:
   id: codex
   env:
     OPENAI_API_KEY: ${{ secrets.KANBANAUTS_AI_API_KEY }}
-    # Default keeps baseUrlEnv valid when the org var is unset (public OpenAI).
-    OPENAI_BASE_URL: ${{ vars.KANBANAUTS_AI_BASE_URL || 'https://api.openai.com/v1' }}
+    # Do not put a literal URL default here: gh-aw parses the expression at
+    # compile time and emits broken --openai-api-base-path / host pins.
+    # scripts/patch_codex_awf_baseurl.py adds the public OpenAI default after compile.
+    OPENAI_BASE_URL: ${{ vars.KANBANAUTS_AI_BASE_URL }}
 model: ${{ vars.KANBANAUTS_AI_MODEL }}
 network:
   allowed:

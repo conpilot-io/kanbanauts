@@ -1,8 +1,28 @@
 # Kanbanauts
 
-GitHub Projects + AI agents. Tickets move on a Kanban board, or you comment `/ai plan`, `/ai doit`, or `/ai review` on any issue. Agents run in the customer's GitHub Actions using the customer's AI keys.
+GitHub Projects + AI agents. Tickets move on a Kanban board, or you comment an `/ai` command on an issue. Agents run in the customer's GitHub Actions using the customer's AI keys.
 
-See [Design.md](Design.md) for the architecture and [docs/ONBOARDING.md](docs/ONBOARDING.md) for install steps.
+See [Manual commands](#manual-commands) for every comment command, [Design.md](Design.md) for the architecture, and [docs/ONBOARDING.md](docs/ONBOARDING.md) for install steps.
+
+## Manual commands
+
+Comment on an issue. The issue does not need to be on a Project board. Only a user with write access can run a command. The label `agent:skip` blocks the command.
+
+| Command | Effect |
+|---|---|
+| `/ai plan` | Start or run planning again. Comment on the issue, not on the pull request. |
+| `/ai doit` | Start implementation. `/ai do` is the same command. Comment on the issue, not on the pull request. |
+| `/ai review` | Review the linked draft pull request. The agent posts comments only. It does not approve and it does not merge. |
+| `/ai retry` | Run a phase again. Add the phase name (`/ai retry doit`). With no name, the phase is `plan`. |
+| `/ai status` | Post the current agent state and the active runs. |
+| `/ai cancel` | Stop the active agent run. |
+| `/ai help` | Post this command list on the issue. |
+
+These prefixes also work: `/kanbanauts`, `@kanbanauts`, `@kanbanauts[bot]`, and `/agent`. You can put `:` or `,` after the prefix (`/ai: plan`).
+
+`/ai review`, `/ai retry`, `/ai status`, and `/ai cancel` also work on a pull request when the pull request body contains `Closes #<issue>`.
+
+If an agent is already queued or running, run `/ai cancel` before `/ai plan`, `/ai doit`, or `/ai review`.
 
 ## How distribution works
 

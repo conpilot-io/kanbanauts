@@ -39,8 +39,9 @@ jobs:
             agent-plan-claude agent-plan-codex agent-plan-gemini \
             agent-doit-claude agent-doit-codex agent-doit-gemini \
             --action-mode action --action-tag "$SHA" --approve
+          python scripts/patch_codex_awf_baseurl.py
           git diff --exit-code -- .github/workflows || {
-            echo "::error::Generated workflows or lock files are out of date. Run scripts/gen-workflows.py and gh aw compile, then commit."
+            echo "::error::Generated workflows or lock files are out of date. Run scripts/gen-workflows.py, gh aw compile, and scripts/patch_codex_awf_baseurl.py, then commit."
             exit 1
           }
         env:

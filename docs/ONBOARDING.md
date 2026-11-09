@@ -16,6 +16,7 @@
 3. Org **Settings → Secrets and variables → Actions**:
    - Secret: `KANBANAUTS_AI_API_KEY`
    - Variables: `KANBANAUTS_AI_MODEL`, and optionally `KANBANAUTS_ENGINE` (`claude` | `codex` | `gemini`), `KANBANAUTS_AI_BASE_URL`
+   - For Azure OpenAI + Codex, set `KANBANAUTS_AI_BASE_URL=https://<resource>.openai.azure.com/openai/v1` (include `/openai/v1`; do not append `/responses`)
    - Set repository access to all repos or the selected repos.
 
 Then:

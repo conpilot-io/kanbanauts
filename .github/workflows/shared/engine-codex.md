@@ -4,7 +4,8 @@ engine:
   id: codex
   env:
     OPENAI_API_KEY: ${{ secrets.KANBANAUTS_AI_API_KEY }}
-    OPENAI_BASE_URL: ${{ vars.KANBANAUTS_AI_BASE_URL }}
+    # Default keeps baseUrlEnv valid when the org var is unset (public OpenAI).
+    OPENAI_BASE_URL: ${{ vars.KANBANAUTS_AI_BASE_URL || 'https://api.openai.com/v1' }}
 model: ${{ vars.KANBANAUTS_AI_MODEL }}
 network:
   allowed:

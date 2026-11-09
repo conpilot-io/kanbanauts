@@ -73,8 +73,11 @@ jobs:
             agent-plan-claude agent-plan-codex agent-plan-gemini \
             agent-doit-claude agent-doit-codex agent-doit-gemini \
             --allow-action-refs --approve
+          # Preserve Azure /openai/v1 paths: gh-aw cannot extract basePath from
+          # runtime ${{ vars.* }} expressions — switch openai targets to baseUrlEnv.
+          python scripts/patch_codex_awf_baseurl.py
           git diff --exit-code -- .github/workflows/*.lock.yml || {
-            echo "::error::Lock files out of date. Compile and commit them."
+            echo "::error::Lock files out of date. Compile, run scripts/patch_codex_awf_baseurl.py, then commit."
             exit 1
           }
         env:

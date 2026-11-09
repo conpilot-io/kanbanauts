@@ -34,6 +34,8 @@ mypy --config-file mypy.ini . | mypy-baseline filter
 python scripts/gen-workflows.py
 # Match the gh-aw pin in .github/workflows/ci.yml (currently v1.2.0)
 gh extension install github/gh-aw --pin v1.2.0
+# After `gh aw compile`, preserve Azure OpenAI base paths in Codex locks:
+python scripts/patch_codex_awf_baseurl.py
 ```
 
 Run the ASGI app:
@@ -83,13 +85,13 @@ KANBANAUTS_AI_API_KEY=<openai-api-key>
 KANBANAUTS_AI_MODEL=gpt-5
 ```
 
-Azure OpenAI:
+Azure OpenAI (Responses API via AWF; keep the `/openai/v1` path, not `/responses`):
 
 ```text
 KANBANAUTS_ENGINE=codex
 KANBANAUTS_AI_API_KEY=<azure-openai-key>
 KANBANAUTS_AI_MODEL=<deployment-name>
-KANBANAUTS_AI_BASE_URL=https://<resource>.openai.azure.com
+KANBANAUTS_AI_BASE_URL=https://<resource>.openai.azure.com/openai/v1
 ```
 
 ### Gemini (Google)

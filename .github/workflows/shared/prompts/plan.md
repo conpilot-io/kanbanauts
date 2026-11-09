@@ -21,9 +21,9 @@ PRIVACY: Do not put emails, names, IP addresses, IBANs, tokens, passwords,
 or other personal data in any GitHub comment. Use counts and time ranges instead.
 
 Post your result with the `add_comment` safe output. Start the comment body with
-exactly this HTML marker on its own line:
+exactly this marker on its own line:
 
-`<!-- kanbanauts:plan -->`
+`kanbanauts-plan`
 
 Then include a plan with:
 1. TL;DR — 3-5 bullet points in plain language

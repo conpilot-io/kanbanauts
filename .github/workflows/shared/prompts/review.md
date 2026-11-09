@@ -30,8 +30,11 @@ Instructions:
    - If no suitable open PR exists, call `add_comment` explaining that, call
      `kanban_report` with `status=blocked`, and stop.
 
-2. Read the linked issue (description + comments). Find the latest plan comment
-   that contains `<!-- kanbanauts:plan -->`. Treat that as the primary specification.
+2. Read the linked issue (description + comments). Use the latest plan comment when
+   one exists. A plan comment is a comment that contains the text `kanbanauts:plan`,
+   or the line `kanbanauts-plan`, or the plan sections (TL;DR, Goal, Proposed approach).
+   When no plan comment exists, the issue title, body, and the other comments are
+   the specification. Review the PR against that.
 
 3. Read the PR diff and the changed files.
 
@@ -46,7 +49,7 @@ Instructions:
      (pass `pull_request_number`).
    - Use `submit_pull_request_review` once with event `COMMENT` (never `APPROVE`
      or `REQUEST_CHANGES`). Pass `pull_request_number`. Start the review body with
-     `<!-- kanbanauts:review -->` and include a short TL;DR plus findings.
+     the line `kanbanauts-review` and include a short TL;DR plus findings.
    - Optionally call `add_comment` on the issue with a one-line summary and the PR link.
 
 6. Call `kanban_report` with `status=succeeded` (or `failed` if you could not review).

@@ -25,8 +25,16 @@ SCOPE:
 Instructions:
 
 1. Read the full issue including ALL comments with `gh issue view <number> --comments`.
-   Find the latest plan comment that contains `<!-- kanbanauts:plan -->`. Treat that as
-   the primary specification.
+   Use the latest plan comment when one exists. A plan comment is a comment that
+   contains the text `kanbanauts:plan`, or the line `kanbanauts-plan`, or the plan
+   sections (TL;DR, Goal, Proposed approach).
+   When no plan comment exists, the issue title, body, and the other comments are
+   the specification. Implement that. A missing plan comment is not a reason to stop.
+   Ignore command comments, grant comments, and short status comments.
+   When the chosen plan lists an open question and no later human comment answers
+   it, call `kanban_report` with `status=blocked`, explain the question, and stop.
+   When the issue lists more than one approach and there is no plan, implement the
+   first concrete approach and name that choice in the PR.
 
 2. Understand the codebase: read relevant files, search for related code.
 
@@ -52,4 +60,5 @@ Instructions:
    The workflow fills the real pull request number after creation.
    Do not pass temporary ids such as `#aw_...`.
 
-If the plan is unclear, call `kanban_report` with `status=blocked` and stop.
+When the specification is unclear after reading the issue and comments, call
+`kanban_report` with `status=blocked` and stop.

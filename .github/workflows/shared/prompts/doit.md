@@ -48,6 +48,8 @@ Instructions:
    Reference the issue with `Closes #<issue-number>`.
 
 8. Call `add_comment` with a short summary and the PR link.
-9. Call `kanban_report` with `status=succeeded` and `pr_number` set.
+9. Call `kanban_report` with `status=succeeded`. Omit `pr_number`.
+   The workflow fills the real pull request number after creation.
+   Do not pass temporary ids such as `#aw_...`.
 
 If the plan is unclear, call `kanban_report` with `status=blocked` and stop.

@@ -66,6 +66,20 @@ safe-outputs:
                 fi
               fi
             fi
+            # BEGIN kanban-report-resolve-pr
+            # Agents may pass a temporary id (#aw_...) before the PR exists.
+            # Prefer digits; otherwise use CREATED_PR_NUMBER from safe_outputs.
+            RAW_PR="${PR:-}"
+            if [[ ! "${PR:-}" =~ ^[0-9]+$ ]]; then
+              if [ -n "${PR:-}" ] && [ "${PR}" != "null" ]; then
+                echo "::warning::Ignoring non-numeric pr_number='$PR'; using CREATED_PR_NUMBER if available"
+              fi
+              PR=""
+              if [[ "${CREATED_PR_NUMBER:-}" =~ ^[0-9]+$ ]]; then
+                PR="$CREATED_PR_NUMBER"
+              fi
+            fi
+            # END kanban-report-resolve-pr
             OIDC=$(curl -sSL -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
               "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${KANBANAUTS_URL}" | jq -r .value)
             BODY=$(jq -n \
@@ -79,13 +93,13 @@ safe-outputs:
                 status: $status,
                 phase: $phase,
                 issue_number: $issue,
-                pr_number: (if $pr == "" then null else ($pr|tonumber) end),
+                pr_number: (if ($pr | test("^[0-9]+$")) then ($pr|tonumber) else null end),
                 message: (if $msg == "" then null else $msg end),
                 oidc_token: $oidc
               }')
             curl -sSL -X POST "${KANBANAUTS_URL}/report" \
               -H "Content-Type: application/json" \
               -d "$BODY"
-            echo "Reported status=$STATUS phase=${PHASE:-plan} issue=$ISSUE"
+            echo "Reported status=$STATUS phase=${PHASE:-plan} issue=$ISSUE pr=${PR:-} raw_pr=${RAW_PR:-}"
 ---
 <!-- Shared Kanbanauts report safe-output job. -->

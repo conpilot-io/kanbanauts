@@ -51,6 +51,9 @@ env:
 
 run-name: agent review #${{ inputs.issue_number }}
 
+concurrency:
+  job-discriminator: ${{ inputs.issue_number }}
+
 safe-outputs:
   add-comment:
     max: 1

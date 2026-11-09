@@ -67,6 +67,43 @@ def test_sources_enable_inlined_imports() -> None:
         assert "inlined-imports: true" in text, path.name
 
 
+def test_sources_set_issue_job_discriminator() -> None:
+    """Different issues must not share the compiled agent/conclusion job slot."""
+    sources = sorted(WORKFLOWS_DIR.glob("agent-*.md"))
+    assert sources, "no agent markdown sources found"
+    for path in sources:
+        text = path.read_text(encoding="utf-8")
+        assert "job-discriminator: ${{ inputs.issue_number }}" in text, path.name
+
+
+def test_lock_concurrency_groups_are_per_issue() -> None:
+    """Agent and conclusion jobs queue per issue; workflow groups stay per run.
+
+    Without the issue discriminator, every /ai doit shares one agent group and
+    runs one after another even when the issues are independent.
+    """
+    locks = sorted(WORKFLOWS_DIR.glob("agent-*.lock.yml"))
+    assert locks, "no lock files found"
+    issue = "${{ inputs.issue_number }}"
+    run_id = "${{ github.run_id }}"
+    for path in locks:
+        lock = yaml.safe_load(path.read_text(encoding="utf-8"))
+        top = lock.get("concurrency") or {}
+        assert run_id in str(top.get("group") or ""), path.name
+
+        agent = ((lock.get("jobs") or {}).get("agent") or {}).get("concurrency") or {}
+        agent_group = str(agent.get("group") or "")
+        assert agent_group.endswith(issue), f"{path.name} agent group={agent_group}"
+
+        conclusion = (
+            ((lock.get("jobs") or {}).get("conclusion") or {}).get("concurrency") or {}
+        )
+        conclusion_group = str(conclusion.get("group") or "")
+        assert conclusion_group.endswith(issue), (
+            f"{path.name} conclusion group={conclusion_group}"
+        )
+
+
 def test_lock_files_have_no_runtime_imports_or_author_file() -> None:
     """Runtime imports and author_file need files that only exist in kanbanauts.
 

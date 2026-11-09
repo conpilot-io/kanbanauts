@@ -144,6 +144,7 @@ imports:
   - shared/kanban-report.md
   - shared/kanban-preflight.md
   - shared/kanban-setup-check.md
+  - shared/prompts/comment-style.md
   - {prompt}
 
 tools:

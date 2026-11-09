@@ -20,6 +20,10 @@ Do NOT create or edit any files, create branches, commit, push, or open a PR.
 PRIVACY: Do not put emails, names, IP addresses, IBANs, tokens, passwords,
 or other personal data in any GitHub comment. Use counts and time ranges instead.
 
+Follow the shared comment-style rules. Keep each section concise — this is for a
+developer skimming the issue. Proposed approach is the approach and why, not a
+full design essay.
+
 Post your result with the `add_comment` safe output. Start the comment body with
 exactly this marker on its own line:
 
@@ -33,6 +37,7 @@ Then include a plan with:
 5. Tests / verification
 6. Risk level — low/medium/high
 7. Open questions — empty if none
+8. Next step — from the shared comment-style matrix (always include)
 
 Structured verdict (required via `kanban_report`):
 - `status=ready` when the plan can be implemented with no unanswered questions

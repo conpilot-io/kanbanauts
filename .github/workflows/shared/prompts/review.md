@@ -21,14 +21,18 @@ SCOPE:
 - Do NOT push commits, open new PRs, or edit files.
 - Keep the review focused on the issue and the plan.
 
+Follow the shared comment-style rules. Prefer a few high-signal findings over a
+long laundry list. Keep it concise — for a developer skimming a PR review.
+
 Instructions:
 
 1. Resolve the pull request:
    - If `${{ inputs.issue_number }}` is already an open PR number, use that PR.
    - Otherwise find the open PR whose body references `Closes #<issue>` / `Fixes #<issue>`
      for this issue (use `gh pr list` / `gh pr view`).
-   - If no suitable open PR exists, call `add_comment` explaining that, call
-     `kanban_report` with `status=blocked`, and stop.
+   - If no suitable open PR exists, call `add_comment` explaining that, end with
+     **Next step**: Comment `/ai doit` on the issue to open a draft PR first,
+     call `kanban_report` with `status=blocked`, and stop.
 
 2. Read the linked issue (description + comments). Use the latest plan comment when
    one exists. A plan comment is a comment that contains the text `kanbanauts:plan`,
@@ -49,8 +53,15 @@ Instructions:
      (pass `pull_request_number`).
    - Use `submit_pull_request_review` once with event `COMMENT` (never `APPROVE`
      or `REQUEST_CHANGES`). Pass `pull_request_number`. Start the review body with
-     the line `kanbanauts-review` and include a short TL;DR plus findings.
-   - Optionally call `add_comment` on the issue with a one-line summary and the PR link.
+     the line `kanbanauts-review`, then include:
+     1. TL;DR — 3-5 bullets on what the PR does and overall risk (plain language)
+     2. Findings — bullets with severity (blocker/major/minor), file/area, short why
+     3. Test gaps — what should be covered but is not, or "looks covered" / "no test needed"
+     4. Overall recommendation — one line
+     5. Next step — from the shared matrix (clean → approve/merge in GitHub;
+        findings → on the **issue**, comment `/ai doit <what to fix>`)
+   - Optionally call `add_comment` on the issue with a one-line summary, the PR link,
+     and the same **Next step**.
 
 6. Call `kanban_report` with `status=succeeded` (or `failed` if you could not review).
 

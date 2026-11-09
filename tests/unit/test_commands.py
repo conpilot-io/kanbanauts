@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 from kanbanauts.core.commands import (
+    HELP_TEXT,
     CommandName,
     command_prefixes_for_config,
     has_write_permission,
     parse_command,
     phase_for_command,
+    status_next_step,
 )
+from kanbanauts.core.state import AgentState
 
 
 def test_parse_plan() -> None:
@@ -110,3 +113,19 @@ def test_permissions() -> None:
     assert has_write_permission("maintain")
     assert not has_write_permission("read")
     assert not has_write_permission(None)
+
+
+def test_help_text_mentions_trailing_input() -> None:
+    assert "Trailing text is allowed" in HELP_TEXT
+    assert "/ai doit use option A" in HELP_TEXT
+    assert "Next step" in HELP_TEXT
+
+
+def test_status_next_step_by_state() -> None:
+    assert "/ai plan" in status_next_step(None)
+    assert "/ai cancel" in status_next_step(AgentState.QUEUED)
+    assert "/ai cancel" in status_next_step(AgentState.RUNNING)
+    assert "/ai doit" in status_next_step(AgentState.SUCCEEDED)
+    assert "/ai review" in status_next_step(AgentState.SUCCEEDED)
+    assert "/ai doit <your answers>" in status_next_step(AgentState.BLOCKED)
+    assert "/ai retry" in status_next_step(AgentState.FAILED)

@@ -22,6 +22,8 @@ SCOPE:
 - Do NOT edit `.github/workflows` or CI config unless the issue explicitly asks.
 - Do NOT install new dependencies unless strictly required.
 
+Follow the shared comment-style rules for every `add_comment` you post.
+
 Instructions:
 
 1. Read the full issue including ALL comments with `gh issue view <number> --comments`.
@@ -32,7 +34,8 @@ Instructions:
    the specification. Implement that. A missing plan comment is not a reason to stop.
    Ignore command comments, grant comments, and short status comments.
    When the chosen plan lists an open question and no later human comment answers
-   it, call `kanban_report` with `status=blocked`, explain the question, and stop.
+   it, call `add_comment` that lists the questions under TL;DR, then a **Next step**
+   with `/ai doit <your answers>`, call `kanban_report` with `status=blocked`, and stop.
    When the issue lists more than one approach and there is no plan, implement the
    first concrete approach and name that choice in the PR.
 
@@ -40,7 +43,8 @@ Instructions:
 
 3. If the plan (or your investigation) shows that no code change is needed:
    - Do NOT open a pull request.
-   - Call `add_comment` explaining why.
+   - Call `add_comment` with TL;DR, why nothing to implement, and **Next step**
+     (`/ai doit` to retry, or `/ai plan` to replan).
    - Call `kanban_report` with `status=blocked` (reason: nothing to implement).
    - Stop.
 
@@ -55,10 +59,15 @@ Instructions:
 7. Push and open a draft pull request with `create_pull_request`.
    Reference the issue with `Closes #<issue-number>`.
 
-8. Call `add_comment` with a short summary and the PR link.
+8. Call `add_comment` with:
+   - TL;DR (what was done, in plain language)
+   - What changed (short bullets)
+   - PR link
+   - **Next step**: Comment `/ai review` to start the AI review.
 9. Call `kanban_report` with `status=succeeded`. Omit `pr_number`.
    The workflow fills the real pull request number after creation.
    Do not pass temporary ids such as `#aw_...`.
 
 When the specification is unclear after reading the issue and comments, call
-`kanban_report` with `status=blocked` and stop.
+`add_comment` with the unclear points and a **Next step**, call `kanban_report`
+with `status=blocked`, and stop.

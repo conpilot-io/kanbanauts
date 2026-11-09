@@ -136,8 +136,35 @@ Kanbanauts commands:
 - `/ai cancel` — stop the active agent run
 - `/ai help` — show this message
 
+Trailing text is allowed, for example: `/ai doit use option A`.
+Agent replies end with a **Next step** that names the command to run next.
+
 Also accepted: `/kanbanauts`, `@kanbanauts`, and `/agent`.
 Only users with write access may run these commands.
 Tickets with the `agent:skip` label are ignored.
 The issue does not need to be on a Project board.
 """
+
+
+def status_next_step(state: object | None) -> str:
+    """One Next step line for `/ai status`, based on the current agent label."""
+    # Import locally to avoid a circular import with state helpers used elsewhere.
+    from kanbanauts.core.state import AgentState
+
+    if state is None:
+        return "**Next step:** Comment `/ai plan` to start."
+    if state == AgentState.QUEUED or state == AgentState.RUNNING:
+        return "**Next step:** Wait for the run, or comment `/ai cancel` to stop it."
+    if state == AgentState.SUCCEEDED:
+        return (
+            "**Next step:** Comment `/ai doit` to implement, "
+            "or `/ai review` if a draft PR already exists."
+        )
+    if state == AgentState.BLOCKED:
+        return (
+            "**Next step:** Answer any open questions, then comment "
+            "`/ai doit <your answers>`."
+        )
+    if state == AgentState.FAILED:
+        return "**Next step:** Comment `/ai retry` to retry the last failed phase."
+    return "**Next step:** Comment `/ai help` for available commands."

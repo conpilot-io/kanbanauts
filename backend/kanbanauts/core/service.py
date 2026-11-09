@@ -19,6 +19,7 @@ from kanbanauts.core.commands import (
     has_write_permission,
     parse_command,
     phase_for_command,
+    status_next_step,
 )
 from kanbanauts.core.config import KanbanautsConfig, load_config_yaml
 from kanbanauts.core.filters import filter_ticket, validate_column_names
@@ -426,6 +427,8 @@ class KanbanautsService:
             ]
             for run in runs:
                 lines.append(f"- {run.get('html_url')}")
+            lines.append("")
+            lines.append(status_next_step(state))
             await self.github.add_issue_comment(
                 token, owner, repo, issue_number, "\n".join(lines)
             )

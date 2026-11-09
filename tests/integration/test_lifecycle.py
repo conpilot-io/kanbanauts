@@ -732,11 +732,11 @@ async def test_issue_comment_plan_on_pr_refused(
 async def test_preflight_command_skips_column_check(
     service: tuple[KanbanautsService, FakeGitHub, Any],
 ) -> None:
-    from tests.helpers_oidc import make_oidc_token
-
     import time
 
     from kanbanauts.core.grants import make_grant_comment
+
+    from tests.helpers_oidc import make_oidc_token
 
     svc, gh, key = service
     _install_client(svc)
@@ -846,6 +846,7 @@ async def test_preflight_command_skip_label(
     import time
 
     from kanbanauts.core.grants import make_grant_comment
+
     from tests.helpers_oidc import make_oidc_token
 
     svc, gh, key = service

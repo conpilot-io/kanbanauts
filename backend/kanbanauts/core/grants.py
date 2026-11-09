@@ -9,7 +9,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 GRANT_TTL_SECONDS = 6 * 60 * 60
 
@@ -48,7 +48,7 @@ def make_grant_comment(
 
 def grant_since_iso(now: float) -> str:
     """GitHub `since` value that still includes a live grant."""
-    moment = datetime.fromtimestamp(now, tz=timezone.utc) - timedelta(seconds=GRANT_TTL_SECONDS)
+    moment = datetime.fromtimestamp(now, tz=UTC) - timedelta(seconds=GRANT_TTL_SECONDS)
     return moment.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 

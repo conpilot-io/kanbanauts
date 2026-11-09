@@ -351,7 +351,10 @@ class KanbanautsService:
                     owner,
                     repo,
                     issue_number,
-                    f"@{user} add `Closes #<issue>` to the pull request, then run the command again.",
+                    (
+                        f"@{user} add `Closes #<issue>` to the pull request, "
+                        "then run the command again."
+                    ),
                 )
                 return HttpResponse.json(200, {"ok": False, "error": "no_linked_issue"})
             issue_number = linked

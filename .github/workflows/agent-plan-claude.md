@@ -9,6 +9,11 @@ on:
         description: "Issue number"
         required: true
         type: number
+      source:
+        description: "How the run was started (board or command)"
+        required: false
+        type: string
+        default: board
     secrets:
       KANBANAUTS_AI_API_KEY:
         required: false

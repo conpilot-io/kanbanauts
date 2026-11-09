@@ -173,6 +173,21 @@ class GitHubApp:
             {"body": body},
         )
 
+    async def add_comment_reaction(
+        self,
+        token: str,
+        owner: str,
+        repo: str,
+        comment_id: int,
+        content: str = "eyes",
+    ) -> Any:
+        """Acknowledge a command comment (e.g. eyes reaction)."""
+        return await self.post(
+            f"/repos/{owner}/{repo}/issues/comments/{comment_id}/reactions",
+            token,
+            {"content": content},
+        )
+
     async def collaborator_permission(
         self, token: str, owner: str, repo: str, username: str
     ) -> str | None:

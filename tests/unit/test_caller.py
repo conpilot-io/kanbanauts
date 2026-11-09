@@ -19,11 +19,15 @@ WORKFLOWS_DIR = REPO_ROOT / ".github" / "workflows"
 def test_render_caller_stable_and_versioned() -> None:
     text = render_caller_workflow()
     assert f"# kanbanauts-caller: {CALLER_VERSION}" in text
+    assert CALLER_VERSION == 6
     assert "uses: conpilot-io/kanbanauts/.github/workflows/agent-plan-claude.lock.yml@v1" in text
     assert "concurrency:" in text
     assert "kanbanauts-${{ inputs.issue_number }}" in text
     assert "plan_claude:" in text
     assert "doit_gemini:" in text
+    assert "review_codex:" in text
+    assert "source:" in text
+    assert "inputs.source || 'board'" in text
     assert parse_caller_version(text) == CALLER_VERSION
     # Stable across calls
     assert render_caller_workflow() == text
@@ -157,6 +161,7 @@ def test_render_config_defaults_no_phases() -> None:
     text = render_config(project_url="https://github.com/orgs/acme/projects/1")
     assert "phases:" not in text
     assert "project: https://github.com/orgs/acme/projects/1" in text
+    assert "on_enter: [{ run: review }]" in text
 
 
 def test_render_config_candidates() -> None:

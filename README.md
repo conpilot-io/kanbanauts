@@ -1,6 +1,6 @@
 # Kanbanauts
 
-GitHub Projects + AI agents. Tickets move on a Kanban board; agents plan and implement in the customer's GitHub Actions using the customer's AI keys.
+GitHub Projects + AI agents. Tickets move on a Kanban board, or you comment `/ai plan`, `/ai doit`, or `/ai review` on any issue. Agents run in the customer's GitHub Actions using the customer's AI keys.
 
 See [Design.md](Design.md) for the architecture and [docs/ONBOARDING.md](docs/ONBOARDING.md) for install steps.
 

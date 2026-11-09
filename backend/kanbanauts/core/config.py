@@ -84,6 +84,7 @@ DEFAULT_CALLER_WORKFLOW = "kanbanauts.yml"
 DEFAULT_PHASES: dict[str, PhaseConfig] = {
     "plan": PhaseConfig(workflow=DEFAULT_CALLER_WORKFLOW),
     "doit": PhaseConfig(workflow=DEFAULT_CALLER_WORKFLOW),
+    "review": PhaseConfig(workflow=DEFAULT_CALLER_WORKFLOW),
 }
 
 _PROJECT_RE = re.compile(
@@ -93,7 +94,8 @@ _PROJECT_RE = re.compile(
 
 class KanbanautsConfig(BaseModel):
     version: int = 1
-    project: str
+    # Optional: comment commands work without a Project board.
+    project: str | None = None
     status_field: str = "Status"
     command_prefix: str = "/agent"
     mode: Mode = Mode.OPT_OUT
@@ -110,7 +112,9 @@ class KanbanautsConfig(BaseModel):
 
     @field_validator("project")
     @classmethod
-    def _validate_project_url(cls, value: str) -> str:
+    def _validate_project_url(cls, value: str | None) -> str | None:
+        if value is None or not str(value).strip():
+            return None
         match = _PROJECT_RE.match(value.strip())
         if not match:
             raise ValueError(
@@ -121,19 +125,29 @@ class KanbanautsConfig(BaseModel):
         return value.rstrip("/")
 
     @property
+    def has_project(self) -> bool:
+        return bool(self.project)
+
+    @property
     def project_owner(self) -> str:
+        if not self.project:
+            raise ValueError("project is not configured")
         match = _PROJECT_RE.match(self.project)
         assert match is not None
         return match.group("owner")
 
     @property
     def project_number(self) -> int:
+        if not self.project:
+            raise ValueError("project is not configured")
         match = _PROJECT_RE.match(self.project)
         assert match is not None
         return int(match.group("number"))
 
     @property
     def project_owner_type(self) -> str:
+        if not self.project:
+            raise ValueError("project is not configured")
         match = _PROJECT_RE.match(self.project)
         assert match is not None
         return match.group(1)  # orgs | users
@@ -169,6 +183,8 @@ def load_config_yaml(text: str) -> KanbanautsConfig:
 
 
 def project_url_matches(config: KanbanautsConfig, owner: str, number: int) -> bool:
+    if not config.has_project:
+        return False
     return (
         config.project_owner.casefold() == owner.casefold()
         and config.project_number == number

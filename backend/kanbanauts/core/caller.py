@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from textwrap import dedent
 
-CALLER_VERSION = 5
+CALLER_VERSION = 6
 CALLER_WORKFLOW_PATH = ".github/workflows/kanbanauts.yml"
 CONFIG_PATH = ".github/kanbanauts.yml"
 CENTRAL_REPO = "conpilot-io/kanbanauts"
@@ -12,7 +12,7 @@ CENTRAL_REF = "v1"
 DEFAULT_BACKEND_URL = "https://kanbanauts-fn.azurewebsites.net/api"
 
 ENGINES = ("claude", "codex", "gemini")
-PHASES = ("plan", "doit")
+PHASES = ("plan", "doit", "review")
 
 AGENT_LABELS: dict[str, str] = {
     "agent:queued": "fbca04",
@@ -47,6 +47,7 @@ def render_caller_workflow(*, version: int = CALLER_VERSION) -> str:
                       uses: {CENTRAL_REPO}/.github/workflows/{lock}@{CENTRAL_REF}
                       with:
                         issue_number: ${{{{ fromJSON(inputs.issue_number) }}}}
+                        source: ${{{{ inputs.source || 'board' }}}}
                       secrets:
                         KANBANAUTS_AI_API_KEY: ${{{{ secrets.KANBANAUTS_AI_API_KEY }}}}
                     """
@@ -70,9 +71,14 @@ def render_caller_workflow(*, version: int = CALLER_VERSION) -> str:
                     required: true
                     type: number
                   phase:
-                    description: Phase name (plan or doit)
+                    description: Phase name (plan, doit, or review)
                     required: true
                     type: string
+                  source:
+                    description: How the run was started (board or command)
+                    required: false
+                    type: string
+                    default: board
             concurrency:
               group: kanbanauts-${{{{ inputs.issue_number }}}}
               cancel-in-progress: false
@@ -139,6 +145,8 @@ def render_config(
                 on_leave: [{{ cancel: true }}]
                 on_success: {{ move_to: Review }}
               Review:
+                on_enter: [{{ run: review }}]
+                on_leave: [{{ cancel: true }}]
                 on_pr_approved: {{ move_to: Tests }}
               Tests:
                 on_enter: []
@@ -193,6 +201,7 @@ def setup_pr_body(
 
         ### Notes
         - Tickets with label `agent:skip` are ignored.
+        - Comment `/ai plan`, `/ai doit`, or `/ai review` on any issue (board optional).
         - Agent logic runs from `{CENTRAL_REPO}@{CENTRAL_REF}` and updates when that tag moves.
         - Put `agent:skip` on a ticket that needs no code change if you prefer to skip agents.
         """

@@ -40,6 +40,8 @@ class TicketContext:
     status_options: dict[str, str] | None = None  # name.casefold() -> option id
     to_column: str | None = None
     from_column: str | None = None
+    # How the run was started: "board" (column move) or "command" (issue comment).
+    source: str = "board"
 
 
 class GitHubGateway(Protocol):
@@ -175,6 +177,7 @@ class ActionRunner:
         await self.set_state(ctx, token, AgentState.QUEUED)
         repo = await self.github.get_repository(token, ctx.owner, ctx.repo)
         ref = str(repo.get("default_branch") or ctx.default_branch)
+        source = ctx.source if ctx.source in ("board", "command") else "board"
         await self.github.dispatch_workflow(
             token,
             ctx.owner,
@@ -184,14 +187,16 @@ class ActionRunner:
             inputs={
                 "issue_number": str(ctx.issue_number),
                 "phase": phase,
+                "source": source,
             },
         )
         logger.info(
-            "Dispatched %s for %s/%s#%s",
+            "Dispatched %s for %s/%s#%s source=%s",
             phase_cfg.workflow,
             ctx.owner,
             ctx.repo,
             ctx.issue_number,
+            source,
         )
 
     async def _cancel(self, ctx: TicketContext) -> None:

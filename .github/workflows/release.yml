@@ -38,6 +38,7 @@ jobs:
           gh aw compile \
             agent-plan-claude agent-plan-codex agent-plan-gemini \
             agent-doit-claude agent-doit-codex agent-doit-gemini \
+            agent-review-claude agent-review-codex agent-review-gemini \
             --action-mode action --action-tag "$SHA" --approve
           python scripts/patch_codex_awf_baseurl.py
           git diff --exit-code -- .github/workflows || {

@@ -5,7 +5,7 @@
 - Install the Kanbanauts GitHub App on your organization.
 - Merge the setup pull request the App opens.
 - Add one org secret (`KANBANAUTS_AI_API_KEY`) and one variable (`KANBANAUTS_AI_MODEL`).
-- Move a ticket to Plan — a plan comment appears on the issue.
+- Move a ticket to Plan — or comment `/ai plan` on any issue — a plan comment appears.
 
 ---
 
@@ -24,12 +24,13 @@ Then:
 - Confirm Project columns match the config: Plan, DoIt, Review, Tests, Done (or edit `.github/kanbanauts.yml`).
 - Optional: add `AGENTS.md` with project rules.
 - Test: create an issue, add it to the Project, move it to Plan. Expect `agent:queued` → plan comment → `agent:succeeded`.
+- Or comment `/ai plan` on a plain issue (no board required). Also: `/ai doit`, `/ai review`.
 
 ### Tickets that need no agent
 
-- Keep them out of Plan/DoIt, or
+- Keep them out of Plan/DoIt/Review, or
 - Add label `agent:skip`, or
-- Set `mode: opt_in` and only label code tickets with `agent`.
+- Set `mode: opt_in` and only label code tickets with `agent` (comment commands still work without the label).
 
 You do **not** run `gh aw add` or `gh aw compile`. Agent logic runs from `conpilot-io/kanbanauts@v1` and updates when that tag moves.
 

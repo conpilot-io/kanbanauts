@@ -13,6 +13,21 @@ def test_wrong_project(sample_config_yaml: str) -> None:
     assert result.reason == "wrong_project"
 
 
+def test_no_project_blocks_board_filter() -> None:
+    cfg = load_config_yaml(
+        """
+version: 1
+columns:
+  Plan:
+    on_enter: [{ run: plan }]
+"""
+    )
+    result = filter_ticket(
+        cfg, labels=set(), has_issue=True, project_owner="acme", project_number=7
+    )
+    assert result.reason == "no_project"
+
+
 def test_draft(sample_config_yaml: str) -> None:
     cfg = load_config_yaml(sample_config_yaml)
     result = filter_ticket(

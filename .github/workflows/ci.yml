@@ -68,10 +68,12 @@ jobs:
           gh aw compile \
             agent-plan-claude agent-plan-codex agent-plan-gemini \
             agent-doit-claude agent-doit-codex agent-doit-gemini \
+            agent-review-claude agent-review-codex agent-review-gemini \
             --action-mode action --action-tag "$SHA" --approve \
           || gh aw compile \
             agent-plan-claude agent-plan-codex agent-plan-gemini \
             agent-doit-claude agent-doit-codex agent-doit-gemini \
+            agent-review-claude agent-review-codex agent-review-gemini \
             --allow-action-refs --approve
           # Preserve Azure /openai/v1 paths: gh-aw cannot extract basePath from
           # runtime ${{ vars.* }} expressions — switch openai targets to baseUrlEnv.

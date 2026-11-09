@@ -44,6 +44,7 @@ BROKEN_OPENAI_BASE_PATH_RE = re.compile(
 CODEX_LOCKS = (
     "agent-plan-codex.lock.yml",
     "agent-doit-codex.lock.yml",
+    "agent-review-codex.lock.yml",
 )
 
 

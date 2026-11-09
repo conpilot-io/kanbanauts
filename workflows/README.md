@@ -18,5 +18,7 @@ python scripts/gen-workflows.py
 SHA=4607d462dc213dbe54d02f77ec31215776fd5554
 gh aw compile agent-plan-claude agent-plan-codex agent-plan-gemini \
   agent-doit-claude agent-doit-codex agent-doit-gemini \
+  agent-review-claude agent-review-codex agent-review-gemini \
   --action-mode action --action-tag "$SHA" --approve
+python scripts/patch_codex_awf_baseurl.py
 ```

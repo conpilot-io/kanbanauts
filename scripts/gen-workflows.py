@@ -65,6 +65,41 @@ Call `kanban_report` with status `succeeded`, `blocked`, or `failed`.
 """,
         "prompt": "shared/prompts/doit.md",
     },
+    "review": {
+        "name": "Kanbanauts — review PR",
+        "description": "Review the draft PR for an issue (comment only)",
+        "timeout": 30,
+        "max_turns": 60,
+        "tools_bash": "[gh, git, jq, grep, find, cat, head, tail, wc, ls, rg]",
+        "edit": "false",
+        "safe_outputs": """\
+safe-outputs:
+  add-comment:
+    max: 1
+    target: "*"
+    github-token: ${{ steps.kanban.outputs.token }}
+  create-pull-request-review-comment:
+    max: 10
+    target: "*"
+    github-token: ${{ steps.kanban.outputs.token }}
+  submit-pull-request-review:
+    max: 1
+    allowed-events: [COMMENT]
+    target: "*"
+    github-token: ${{ steps.kanban.outputs.token }}
+  create-issue: false
+""",
+        "body": """\
+# Kanbanauts review
+
+If `KANBANAUTS_SKIP` is `1`, do nothing and exit.
+Otherwise review the draft PR. Follow the imported prompt.
+Use `create_pull_request_review_comment` and `submit_pull_request_review`
+(event COMMENT only — never APPROVE or REQUEST_CHANGES).
+Call `kanban_report` with status `succeeded`, `blocked`, or `failed`.
+""",
+        "prompt": "shared/prompts/review.md",
+    },
 }
 
 ENGINES = ("claude", "codex", "gemini")
@@ -81,6 +116,11 @@ on:
         description: "Issue number"
         required: true
         type: number
+      source:
+        description: "How the run was started (board or command)"
+        required: false
+        type: string
+        default: board
     secrets:
       KANBANAUTS_AI_API_KEY:
         required: false

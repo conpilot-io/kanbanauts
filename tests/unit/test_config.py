@@ -73,7 +73,25 @@ columns:
     )
     plan = cfg.phase_for_run("plan")
     doit = cfg.phase_for_run("doit")
+    review = cfg.phase_for_run("review")
     assert plan is not None
     assert doit is not None
+    assert review is not None
     assert plan.workflow == "kanbanauts.yml"
     assert doit.workflow == "kanbanauts.yml"
+    assert review.workflow == "kanbanauts.yml"
+
+
+def test_config_without_project() -> None:
+    cfg = load_config_yaml(
+        """
+version: 1
+columns:
+  Plan:
+    on_enter: [{ run: plan }]
+"""
+    )
+    assert cfg.project is None
+    assert not cfg.has_project
+    assert cfg.phase_for_run("plan") is not None
+    assert cfg.phase_for_run("review") is not None

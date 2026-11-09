@@ -31,6 +31,8 @@ def filter_ticket(
 ) -> FilterResult:
     if not has_issue:
         return FilterResult.deny("draft_or_no_issue")
+    if not config.has_project:
+        return FilterResult.deny("no_project")
     if (
         config.project_owner.casefold() != project_owner.casefold()
         or config.project_number != project_number

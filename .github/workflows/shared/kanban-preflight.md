@@ -1,5 +1,6 @@
 ---
 # Preflight: skip the agent if the ticket left the phase column.
+# Comment-triggered runs (source=command) skip the column check.
 # Importing workflows set env GH_AW_KANBAN_PHASE.
 permissions:
   id-token: write
@@ -10,6 +11,7 @@ pre-agent-steps:
       KANBANAUTS_URL: ${{ vars.KANBANAUTS_URL || 'https://kanbanauts-fn.azurewebsites.net/api' }}
       PHASE: ${{ env.GH_AW_KANBAN_PHASE }}
       ISSUE: ${{ inputs.issue_number }}
+      SOURCE: ${{ inputs.source || 'board' }}
     run: |
       set -euo pipefail
       if [ "${KANBANAUTS_SKIP:-0}" = "1" ]; then
@@ -21,6 +23,7 @@ pre-agent-steps:
       RESP=$(curl -sSL -G "${KANBANAUTS_URL}/preflight" \
         --data-urlencode "issue=${ISSUE}" \
         --data-urlencode "phase=${PHASE}" \
+        --data-urlencode "source=${SOURCE}" \
         -H "Authorization: Bearer ${OIDC}")
       echo "$RESP"
       SKIP=$(printf '%s' "$RESP" | jq -r '.skip // true')

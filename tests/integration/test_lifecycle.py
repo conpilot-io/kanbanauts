@@ -28,6 +28,7 @@ class FakeGitHub(GitHubApp):
         self.dispatched: list[dict[str, Any]] = []
         self.cancelled: list[int] = []
         self.comments: list[str] = []
+        self.reactions: list[dict[str, Any]] = []
         self.label_ops: list[tuple[list[str], list[str]]] = []
         self.labels: set[str] = set()
         self.runs: list[dict[str, Any]] = []
@@ -35,6 +36,8 @@ class FakeGitHub(GitHubApp):
         self.current_column = "Plan"
         self.field_options = ["Backlog", "Plan", "DoIt", "Review", "Tests", "Done"]
         self.moved_to: list[str] = []
+        self.permission: str | None = "write"
+        self.project_items: list[dict[str, Any]] | None = None
 
     async def installation_token(self, installation_id: int, **kwargs: Any) -> str:
         return "inst-token"
@@ -71,6 +74,17 @@ class FakeGitHub(GitHubApp):
         self, token: str, owner: str, repo: str, issue_number: int, body: str
     ) -> Any:
         self.comments.append(body)
+        return {"id": 1}
+
+    async def add_comment_reaction(
+        self,
+        token: str,
+        owner: str,
+        repo: str,
+        comment_id: int,
+        content: str = "eyes",
+    ) -> Any:
+        self.reactions.append({"comment_id": comment_id, "content": content})
         return {"id": 1}
 
     async def dispatch_workflow(
@@ -165,13 +179,14 @@ class FakeGitHub(GitHubApp):
                     break
             return {"updateProjectV2ItemFieldValue": {"projectV2Item": {"id": "PVTI_1"}}}
         if "items(first:" in query:
+            nodes = self.project_items
+            if nodes is None:
+                nodes = [{"id": "PVTI_1", "content": {"id": "I_1"}}]
             return {
                 "organization": {
                     "projectV2": {
                         "items": {
-                            "nodes": [
-                                {"id": "PVTI_1", "content": {"id": "I_1"}}
-                            ]
+                            "nodes": nodes
                         }
                     }
                 }
@@ -186,7 +201,7 @@ class FakeGitHub(GitHubApp):
     async def collaborator_permission(
         self, token: str, owner: str, repo: str, username: str
     ) -> str | None:
-        return "write"
+        return self.permission
 
 
 @pytest.fixture
@@ -286,6 +301,8 @@ async def test_enter_plan_dispatches(
     assert resp.status == 200
     assert gh.dispatched
     assert gh.dispatched[0]["workflow"] == "kanbanauts.yml"
+    assert gh.dispatched[0]["inputs"]["phase"] == "plan"
+    assert gh.dispatched[0]["inputs"]["source"] == "board"
     assert "agent:queued" in gh.labels
 
 
@@ -539,12 +556,213 @@ async def test_issue_comment_plan(
         "installation": {"id": 99},
         "repository": {"name": "app", "owner": {"login": "acme"}},
         "issue": {"number": 42, "labels": []},
-        "comment": {"body": "/agent plan", "user": {"login": "alice"}},
+        "comment": {
+            "id": 9001,
+            "body": "/agent plan",
+            "user": {"login": "alice", "type": "User"},
+        },
     }
     resp = await _post_webhook(svc, "issue_comment", payload)
     assert resp.status == 200
     assert gh.dispatched
     assert gh.dispatched[0]["workflow"] == "kanbanauts.yml"
+    assert gh.dispatched[0]["inputs"]["phase"] == "plan"
+    assert gh.dispatched[0]["inputs"]["source"] == "command"
+    assert gh.reactions and gh.reactions[0]["content"] == "eyes"
+
+
+@pytest.mark.asyncio
+async def test_issue_comment_ai_prefix_no_board(
+    service: tuple[KanbanautsService, FakeGitHub, Any],
+) -> None:
+    svc, gh, _key = service
+    gh.config_text = """
+version: 1
+command_prefix: /agent
+mode: opt_out
+skip_label: agent:skip
+columns: {}
+"""
+    payload = {
+        "action": "created",
+        "installation": {"id": 99},
+        "repository": {"name": "app", "owner": {"login": "acme"}},
+        "issue": {"number": 7, "labels": []},
+        "comment": {
+            "id": 1,
+            "body": "/ai review",
+            "user": {"login": "alice", "type": "User"},
+        },
+    }
+    resp = await _post_webhook(svc, "issue_comment", payload)
+    assert resp.status == 200
+    assert gh.dispatched
+    assert gh.dispatched[0]["inputs"] == {
+        "issue_number": "7",
+        "phase": "review",
+        "source": "command",
+    }
+
+
+@pytest.mark.asyncio
+async def test_issue_comment_bot_ignored(
+    service: tuple[KanbanautsService, FakeGitHub, Any],
+) -> None:
+    svc, gh, _key = service
+    payload = {
+        "action": "created",
+        "installation": {"id": 99},
+        "repository": {"name": "app", "owner": {"login": "acme"}},
+        "issue": {"number": 42, "labels": []},
+        "comment": {
+            "id": 1,
+            "body": "/ai plan",
+            "user": {"login": "kanbanauts[bot]", "type": "Bot"},
+        },
+    }
+    resp = await _post_webhook(svc, "issue_comment", payload)
+    assert json.loads(resp.body)["ignored"] == "bot"
+    assert not gh.dispatched
+
+
+@pytest.mark.asyncio
+async def test_issue_comment_readonly_refused(
+    service: tuple[KanbanautsService, FakeGitHub, Any],
+) -> None:
+    svc, gh, _key = service
+    gh.permission = "read"
+    payload = {
+        "action": "created",
+        "installation": {"id": 99},
+        "repository": {"name": "app", "owner": {"login": "acme"}},
+        "issue": {"number": 42, "labels": []},
+        "comment": {
+            "id": 1,
+            "body": "/ai plan",
+            "user": {"login": "bob", "type": "User"},
+        },
+    }
+    resp = await _post_webhook(svc, "issue_comment", payload)
+    assert json.loads(resp.body)["error"] == "forbidden"
+    assert not gh.dispatched
+    assert any("write access" in c for c in gh.comments)
+
+
+@pytest.mark.asyncio
+async def test_issue_comment_skip_label_blocks(
+    service: tuple[KanbanautsService, FakeGitHub, Any],
+) -> None:
+    svc, gh, _key = service
+    gh.labels.add("agent:skip")
+    payload = {
+        "action": "created",
+        "installation": {"id": 99},
+        "repository": {"name": "app", "owner": {"login": "acme"}},
+        "issue": {"number": 42, "labels": [{"name": "agent:skip"}]},
+        "comment": {
+            "id": 1,
+            "body": "/ai plan",
+            "user": {"login": "alice", "type": "User"},
+        },
+    }
+    resp = await _post_webhook(svc, "issue_comment", payload)
+    assert json.loads(resp.body)["ignored"] == "skip_label"
+    assert not gh.dispatched
+
+
+@pytest.mark.asyncio
+async def test_issue_comment_plan_on_pr_refused(
+    service: tuple[KanbanautsService, FakeGitHub, Any],
+) -> None:
+    svc, gh, _key = service
+    payload = {
+        "action": "created",
+        "installation": {"id": 99},
+        "repository": {"name": "app", "owner": {"login": "acme"}},
+        "issue": {"number": 99, "labels": [], "pull_request": {"url": "https://x"}},
+        "comment": {
+            "id": 1,
+            "body": "/ai plan",
+            "user": {"login": "alice", "type": "User"},
+        },
+    }
+    resp = await _post_webhook(svc, "issue_comment", payload)
+    assert json.loads(resp.body)["error"] == "use_issue"
+    assert not gh.dispatched
+    assert any("issue" in c.casefold() for c in gh.comments)
+
+
+@pytest.mark.asyncio
+async def test_preflight_command_skips_column_check(
+    service: tuple[KanbanautsService, FakeGitHub, Any],
+) -> None:
+    from tests.helpers_oidc import make_oidc_token
+
+    svc, gh, key = service
+    _install_client(svc)
+    gh.current_column = "Backlog"
+    oidc = make_oidc_token(key, aud=svc.settings.oidc_audience)
+    req = HttpRequest(
+        method="GET",
+        path="/preflight",
+        headers={"Authorization": f"Bearer {oidc}"},
+        body=b"",
+        query={"issue": "42", "phase": "plan", "source": "command"},
+    )
+    resp = await svc.handle_http(req)
+    assert resp.status == 200
+    data = json.loads(resp.body)
+    assert data["skip"] is False
+    assert "agent:running" in gh.labels
+
+
+@pytest.mark.asyncio
+async def test_preflight_board_column_mismatch(
+    service: tuple[KanbanautsService, FakeGitHub, Any],
+) -> None:
+    from tests.helpers_oidc import make_oidc_token
+
+    svc, gh, key = service
+    _install_client(svc)
+    gh.current_column = "Backlog"
+    oidc = make_oidc_token(key, aud=svc.settings.oidc_audience)
+    req = HttpRequest(
+        method="GET",
+        path="/preflight",
+        headers={"Authorization": f"Bearer {oidc}"},
+        body=b"",
+        query={"issue": "42", "phase": "plan", "source": "board"},
+    )
+    resp = await svc.handle_http(req)
+    assert resp.status == 200
+    data = json.loads(resp.body)
+    assert data["skip"] is True
+    assert data["reason"] == "column_mismatch"
+
+
+@pytest.mark.asyncio
+async def test_report_succeeded_without_board_item(
+    service: tuple[KanbanautsService, FakeGitHub, Any],
+) -> None:
+    from tests.helpers_oidc import make_oidc_token
+
+    svc, gh, key = service
+    _install_client(svc)
+    gh.project_items = []  # issue not on board
+    oidc = make_oidc_token(key, aud=svc.settings.oidc_audience)
+    body = json.dumps(
+        {
+            "status": "succeeded",
+            "phase": "doit",
+            "issue_number": 42,
+            "oidc_token": oidc,
+        }
+    ).encode()
+    req = HttpRequest(method="POST", path="/report", headers={}, body=body)
+    resp = await svc.handle_http(req)
+    assert resp.status == 200
+    assert "agent:succeeded" in gh.labels
+    assert gh.moved_to == []
 
 
 def test_config_loads() -> None:

@@ -38,6 +38,8 @@ class FakeGitHub(GitHubApp):
         self.moved_to: list[str] = []
         self.permission: str | None = "write"
         self.project_items: list[dict[str, Any]] | None = None
+        self.caller_text: str | None = None
+        self.dispatch_error: Exception | None = None
 
     async def installation_token(self, installation_id: int, **kwargs: Any) -> str:
         return "inst-token"
@@ -47,6 +49,8 @@ class FakeGitHub(GitHubApp):
     ) -> str | None:
         if path == ".github/kanbanauts.yml":
             return self.config_text
+        if path == ".github/workflows/kanbanauts.yml":
+            return self.caller_text
         return None
 
     async def list_issue_labels(
@@ -87,6 +91,17 @@ class FakeGitHub(GitHubApp):
         self.reactions.append({"comment_id": comment_id, "content": content})
         return {"id": 1}
 
+    async def list_issue_comments(
+        self,
+        token: str,
+        owner: str,
+        repo: str,
+        issue_number: int,
+        *,
+        since: str | None = None,
+    ) -> list[str]:
+        return list(self.comments)
+
     async def dispatch_workflow(
         self,
         token: str,
@@ -97,6 +112,8 @@ class FakeGitHub(GitHubApp):
         ref: str,
         inputs: dict[str, Any],
     ) -> None:
+        if self.dispatch_error is not None:
+            raise self.dispatch_error
         self.dispatched.append(
             {"workflow": workflow_id, "ref": ref, "inputs": inputs}
         )
@@ -123,6 +140,25 @@ class FakeGitHub(GitHubApp):
     async def graphql(
         self, token: str, query: str, variables: dict[str, Any] | None = None
     ) -> Any:
+        if "projectItems" in query:
+            nodes = self.project_items
+            if nodes is None:
+                nodes = [
+                    {
+                        "id": "PVTI_1",
+                        "project": {"number": 7, "owner": {"login": "acme"}},
+                    }
+                ]
+            else:
+                normalized: list[dict[str, Any]] = []
+                for raw in nodes:
+                    item = dict(raw)
+                    item.setdefault(
+                        "project", {"number": 7, "owner": {"login": "acme"}}
+                    )
+                    normalized.append(item)
+                nodes = normalized
+            return {"node": {"projectItems": {"nodes": nodes}}}
         if "fieldValues" in query and "node(id:" in query.replace(" ", ""):
             # ITEM_WITH_CONTENT or similar
             if "ProjectV2Item" in query or "fieldValues" in query:
@@ -151,25 +187,23 @@ class FakeGitHub(GitHubApp):
                     }
                 }
         if "projectV2" in query and "fields" in query:
-            return {
-                "organization": {
-                    "projectV2": {
-                        "id": "PVT_1",
-                        "fields": {
-                            "nodes": [
-                                {
-                                    "id": "FIELD_1",
-                                    "name": "Status",
-                                    "options": [
-                                        {"id": f"opt-{n}", "name": n}
-                                        for n in self.field_options
-                                    ],
-                                }
-                            ]
-                        },
-                    }
-                }
+            project = {
+                "id": "PVT_1",
+                "fields": {
+                    "nodes": [
+                        {
+                            "id": "FIELD_1",
+                            "name": "Status",
+                            "options": [
+                                {"id": f"opt-{n}", "name": n} for n in self.field_options
+                            ],
+                        }
+                    ]
+                },
             }
+            if "user(login:" in query:
+                return {"user": {"projectV2": project}}
+            return {"organization": {"projectV2": project}}
         if "updateProjectV2ItemFieldValue" in query:
             option_id = str((variables or {}).get("optionId", ""))
             for name in self.field_options:
@@ -668,6 +702,7 @@ async def test_issue_comment_skip_label_blocks(
     resp = await _post_webhook(svc, "issue_comment", payload)
     assert json.loads(resp.body)["ignored"] == "skip_label"
     assert not gh.dispatched
+    assert not gh.reactions
 
 
 @pytest.mark.asyncio
@@ -689,6 +724,7 @@ async def test_issue_comment_plan_on_pr_refused(
     resp = await _post_webhook(svc, "issue_comment", payload)
     assert json.loads(resp.body)["error"] == "use_issue"
     assert not gh.dispatched
+    assert not gh.reactions
     assert any("issue" in c.casefold() for c in gh.comments)
 
 
@@ -698,9 +734,23 @@ async def test_preflight_command_skips_column_check(
 ) -> None:
     from tests.helpers_oidc import make_oidc_token
 
+    import time
+
+    from kanbanauts.core.grants import make_grant_comment
+
     svc, gh, key = service
     _install_client(svc)
     gh.current_column = "Backlog"
+    gh.comments.append(
+        make_grant_comment(
+            secret="s3cret",
+            owner="acme",
+            repo="app",
+            issue_number=42,
+            phase="plan",
+            now=time.time(),
+        )
+    )
     oidc = make_oidc_token(key, aud=svc.settings.oidc_audience)
     req = HttpRequest(
         method="GET",
@@ -763,6 +813,264 @@ async def test_report_succeeded_without_board_item(
     assert resp.status == 200
     assert "agent:succeeded" in gh.labels
     assert gh.moved_to == []
+
+
+@pytest.mark.asyncio
+async def test_preflight_command_without_grant_skips(
+    service: tuple[KanbanautsService, FakeGitHub, Any],
+) -> None:
+    from tests.helpers_oidc import make_oidc_token
+
+    svc, gh, key = service
+    _install_client(svc)
+    gh.current_column = "Plan"
+    oidc = make_oidc_token(key, aud=svc.settings.oidc_audience)
+    req = HttpRequest(
+        method="GET",
+        path="/preflight",
+        headers={"Authorization": f"Bearer {oidc}"},
+        body=b"",
+        query={"issue": "42", "phase": "plan", "source": "command"},
+    )
+    resp = await svc.handle_http(req)
+    data = json.loads(resp.body)
+    assert data["skip"] is True
+    assert data["reason"] == "no_command_grant"
+    assert "agent:running" not in gh.labels
+
+
+@pytest.mark.asyncio
+async def test_preflight_command_skip_label(
+    service: tuple[KanbanautsService, FakeGitHub, Any],
+) -> None:
+    import time
+
+    from kanbanauts.core.grants import make_grant_comment
+    from tests.helpers_oidc import make_oidc_token
+
+    svc, gh, key = service
+    _install_client(svc)
+    gh.labels.add("agent:skip")
+    gh.comments.append(
+        make_grant_comment(
+            secret="s3cret",
+            owner="acme",
+            repo="app",
+            issue_number=42,
+            phase="doit",
+            now=time.time(),
+        )
+    )
+    oidc = make_oidc_token(key, aud=svc.settings.oidc_audience)
+    req = HttpRequest(
+        method="GET",
+        path="/preflight",
+        headers={"Authorization": f"Bearer {oidc}"},
+        body=b"",
+        query={"issue": "42", "phase": "doit", "source": "command"},
+    )
+    resp = await svc.handle_http(req)
+    data = json.loads(resp.body)
+    assert data["skip"] is True
+    assert data["reason"] == "skip_label"
+
+
+@pytest.mark.asyncio
+async def test_issue_comment_review_on_pr_uses_linked_issue(
+    service: tuple[KanbanautsService, FakeGitHub, Any],
+) -> None:
+    svc, gh, _key = service
+    payload = {
+        "action": "created",
+        "installation": {"id": 99},
+        "repository": {"name": "app", "owner": {"login": "acme"}},
+        "issue": {
+            "number": 99,
+            "labels": [],
+            "body": "Closes #42",
+            "pull_request": {"url": "https://x"},
+        },
+        "comment": {
+            "id": 7,
+            "body": "/ai review",
+            "user": {"login": "alice", "type": "User"},
+        },
+    }
+    resp = await _post_webhook(svc, "issue_comment", payload)
+    assert resp.status == 200
+    assert gh.dispatched
+    assert gh.dispatched[0]["inputs"]["issue_number"] == "42"
+    assert gh.dispatched[0]["inputs"]["phase"] == "review"
+    assert gh.dispatched[0]["inputs"]["source"] == "command"
+    assert gh.reactions[0]["comment_id"] == 7
+    assert any("kanbanauts:grant" in c and "phase=review" in c for c in gh.comments)
+
+
+@pytest.mark.asyncio
+async def test_caller_v5_omits_source(
+    service: tuple[KanbanautsService, FakeGitHub, Any],
+) -> None:
+    svc, gh, _key = service
+    gh.caller_text = "# kanbanauts-caller: 5\non:\n  workflow_dispatch:\n"
+    payload = {
+        "action": "created",
+        "installation": {"id": 99},
+        "repository": {"name": "app", "owner": {"login": "acme"}},
+        "issue": {"number": 42, "labels": []},
+        "comment": {
+            "id": 1,
+            "body": "/ai plan",
+            "user": {"login": "alice", "type": "User"},
+        },
+    }
+    resp = await _post_webhook(svc, "issue_comment", payload)
+    assert json.loads(resp.body)["ok"] is True
+    assert "source" not in gh.dispatched[0]["inputs"]
+    assert gh.dispatched[0]["inputs"]["phase"] == "plan"
+
+
+@pytest.mark.asyncio
+async def test_dispatch_failure_clears_queued_label(
+    service: tuple[KanbanautsService, FakeGitHub, Any],
+) -> None:
+    svc, gh, _key = service
+    gh.dispatch_error = RuntimeError("422 Unexpected inputs")
+    resp = await _post_webhook(
+        svc, "projects_v2_item", _project_edited_payload(from_name="Backlog", to_name="Plan")
+    )
+    assert json.loads(resp.body)["error"] == "dispatch_failed"
+    assert "agent:queued" not in gh.labels
+    assert any("could not start" in c for c in gh.comments)
+
+
+@pytest.mark.asyncio
+async def test_report_no_code_does_not_move_from_other_column(
+    service: tuple[KanbanautsService, FakeGitHub, Any],
+) -> None:
+    from tests.helpers_oidc import make_oidc_token
+
+    svc, gh, key = service
+    _install_client(svc)
+    gh.current_column = "Review"
+    oidc = make_oidc_token(key, aud=svc.settings.oidc_audience)
+    body = json.dumps(
+        {"status": "no_code", "phase": "plan", "issue_number": 42, "oidc_token": oidc}
+    ).encode()
+    req = HttpRequest(method="POST", path="/report", headers={}, body=body)
+    resp = await svc.handle_http(req)
+    assert resp.status == 200
+    assert "agent:succeeded" in gh.labels
+    assert gh.moved_to == []
+
+
+@pytest.mark.asyncio
+async def test_report_doit_does_not_move_from_done(
+    service: tuple[KanbanautsService, FakeGitHub, Any],
+) -> None:
+    from tests.helpers_oidc import make_oidc_token
+
+    svc, gh, key = service
+    _install_client(svc)
+    gh.current_column = "Done"
+    oidc = make_oidc_token(key, aud=svc.settings.oidc_audience)
+    body = json.dumps(
+        {"status": "succeeded", "phase": "doit", "issue_number": 42, "oidc_token": oidc}
+    ).encode()
+    req = HttpRequest(method="POST", path="/report", headers={}, body=body)
+    resp = await svc.handle_http(req)
+    assert resp.status == 200
+    assert gh.moved_to == []
+
+
+@pytest.mark.asyncio
+async def test_report_doit_moves_user_project_when_in_column(
+    service: tuple[KanbanautsService, FakeGitHub, Any],
+) -> None:
+    from tests.helpers_oidc import make_oidc_token
+
+    svc, gh, key = service
+    _install_client(svc)
+    gh.config_text = SAMPLE_CONFIG.replace(
+        "https://github.com/orgs/acme/projects/7",
+        "https://github.com/users/acme/projects/7",
+    )
+    gh.current_column = "DoIt"
+    oidc = make_oidc_token(key, aud=svc.settings.oidc_audience)
+    body = json.dumps(
+        {"status": "succeeded", "phase": "doit", "issue_number": 42, "oidc_token": oidc}
+    ).encode()
+    req = HttpRequest(method="POST", path="/report", headers={}, body=body)
+    resp = await svc.handle_http(req)
+    assert resp.status == 200
+    assert gh.moved_to == ["Review"]
+
+
+@pytest.mark.asyncio
+async def test_enter_review_dispatches_review(
+    service: tuple[KanbanautsService, FakeGitHub, Any],
+) -> None:
+    svc, gh, _key = service
+    gh.config_text = SAMPLE_CONFIG.replace(
+        "  Review:\n    on_pr_approved: { move_to: Tests }",
+        "  Review:\n"
+        "    on_enter: [{ run: review }]\n"
+        "    on_leave: [{ cancel: true }]\n"
+        "    on_pr_approved: { move_to: Tests }",
+    )
+    resp = await _post_webhook(
+        svc, "projects_v2_item", _project_edited_payload(from_name="DoIt", to_name="Review")
+    )
+    assert resp.status == 200
+    assert gh.dispatched
+    assert gh.dispatched[0]["inputs"]["phase"] == "review"
+    assert gh.dispatched[0]["inputs"]["source"] == "board"
+
+
+@pytest.mark.asyncio
+async def test_leave_review_without_run_stays_quiet(
+    service: tuple[KanbanautsService, FakeGitHub, Any],
+) -> None:
+    svc, gh, _key = service
+    gh.config_text = SAMPLE_CONFIG.replace(
+        "  Review:\n    on_pr_approved: { move_to: Tests }",
+        "  Review:\n"
+        "    on_enter: [{ run: review }]\n"
+        "    on_leave: [{ cancel: true }]\n"
+        "    on_pr_approved: { move_to: Tests }",
+    )
+    gh.labels.add("agent:succeeded")
+    resp = await _post_webhook(
+        svc, "projects_v2_item", _project_edited_payload(from_name="Review", to_name="Tests")
+    )
+    assert resp.status == 200
+    assert not gh.cancelled
+    assert not any("Stopped" in c for c in gh.comments)
+    assert "agent:succeeded" in gh.labels
+    assert not gh.dispatched
+
+
+@pytest.mark.asyncio
+async def test_cancelled_command_run_off_column_marks_failed(
+    service: tuple[KanbanautsService, FakeGitHub, Any],
+) -> None:
+    svc, gh, _key = service
+    gh.current_column = "Backlog"
+    gh.labels.add("agent:running")
+    payload = {
+        "action": "completed",
+        "installation": {"id": 99},
+        "repository": {"name": "app", "owner": {"login": "acme"}},
+        "workflow_run": {
+            "conclusion": "cancelled",
+            "name": "agent plan #42",
+            "display_title": "agent plan #42",
+            "html_url": "https://example/run/9",
+        },
+    }
+    resp = await _post_webhook(svc, "workflow_run", payload)
+    assert json.loads(resp.body).get("marked") == "failed"
+    assert "agent:running" not in gh.labels
+    assert "agent:failed" in gh.labels
 
 
 def test_config_loads() -> None:

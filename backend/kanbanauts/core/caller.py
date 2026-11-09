@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import re
 from textwrap import dedent
 
 CALLER_VERSION = 6
+# Caller workflows at this version declare the `source` workflow_dispatch input.
+SOURCE_INPUT_SINCE = 6
 CALLER_WORKFLOW_PATH = ".github/workflows/kanbanauts.yml"
 CONFIG_PATH = ".github/kanbanauts.yml"
 CENTRAL_REPO = "conpilot-io/kanbanauts"
@@ -154,6 +157,20 @@ def render_config(
             """
         )
     )
+
+
+def caller_accepts_source(workflow_text: str | None) -> bool:
+    """True when the caller file can take a `source` dispatch input.
+
+    An empty read means the file is unknown. The caller then keeps the
+    current input. A known caller older than version 6 rejects `source`.
+    """
+    if not workflow_text:
+        return True
+    version = parse_caller_version(workflow_text)
+    if version is not None:
+        return version >= SOURCE_INPUT_SINCE
+    return bool(re.search(r"(?m)^[ ]+source:\s*$", workflow_text))
 
 
 def parse_caller_version(workflow_text: str) -> int | None:

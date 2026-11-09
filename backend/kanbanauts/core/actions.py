@@ -6,6 +6,7 @@ import logging
 from dataclasses import dataclass
 from typing import Any, Protocol
 
+from kanbanauts.core.caller import CALLER_WORKFLOW_PATH, caller_accepts_source
 from kanbanauts.core.config import (
     Action,
     CancelAction,
@@ -24,6 +25,10 @@ from kanbanauts.core.state import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+class DispatchError(RuntimeError):
+    """The workflow dispatch failed and the queued label was cleared."""
 
 
 @dataclass(slots=True)
@@ -175,21 +180,34 @@ class ActionRunner:
             raise ValueError(f"Unknown phase '{phase}' in kanbanauts.yml")
         token = await self._token(ctx)
         await self.set_state(ctx, token, AgentState.QUEUED)
-        repo = await self.github.get_repository(token, ctx.owner, ctx.repo)
-        ref = str(repo.get("default_branch") or ctx.default_branch)
         source = ctx.source if ctx.source in ("board", "command") else "board"
-        await self.github.dispatch_workflow(
-            token,
-            ctx.owner,
-            ctx.repo,
-            phase_cfg.workflow,
-            ref=ref,
-            inputs={
+        try:
+            repo = await self.github.get_repository(token, ctx.owner, ctx.repo)
+            ref = str(repo.get("default_branch") or ctx.default_branch)
+            inputs: dict[str, Any] = {
                 "issue_number": str(ctx.issue_number),
                 "phase": phase,
-                "source": source,
-            },
-        )
+            }
+            if await self._caller_accepts_source(token, ctx, phase_cfg.workflow, ref):
+                inputs["source"] = source
+            await self.github.dispatch_workflow(
+                token,
+                ctx.owner,
+                ctx.repo,
+                phase_cfg.workflow,
+                ref=ref,
+                inputs=inputs,
+            )
+        except Exception as exc:
+            logger.exception(
+                "dispatch failed for %s/%s#%s phase=%s",
+                ctx.owner,
+                ctx.repo,
+                ctx.issue_number,
+                phase,
+            )
+            await self._clear_after_dispatch_failure(ctx, token)
+            raise DispatchError("dispatch failed") from exc
         logger.info(
             "Dispatched %s for %s/%s#%s source=%s",
             phase_cfg.workflow,
@@ -198,6 +216,44 @@ class ActionRunner:
             ctx.issue_number,
             source,
         )
+
+    async def _caller_accepts_source(
+        self,
+        token: str,
+        ctx: TicketContext,
+        workflow: str,
+        ref: str,
+    ) -> bool:
+        """Omit `source` for a caller file that does not declare that input."""
+        get_file = getattr(self.github, "get_repo_file", None)
+        if get_file is None:
+            return True
+        if workflow.startswith(".github/"):
+            path = workflow
+        elif workflow == "kanbanauts.yml":
+            path = CALLER_WORKFLOW_PATH
+        else:
+            path = f".github/workflows/{workflow}"
+        text = await get_file(token, ctx.owner, ctx.repo, path, ref=ref)
+        if not isinstance(text, str):
+            return True
+        return caller_accepts_source(text)
+
+    async def _clear_after_dispatch_failure(self, ctx: TicketContext, token: str) -> None:
+        try:
+            await self.set_state(ctx, token, None)
+        except Exception:  # noqa: BLE001
+            logger.exception("failed to clear queued label after dispatch error")
+        try:
+            await self.github.add_issue_comment(
+                token,
+                ctx.owner,
+                ctx.repo,
+                ctx.issue_number,
+                "Kanbanauts could not start the agent workflow.",
+            )
+        except Exception:  # noqa: BLE001
+            logger.exception("failed to comment after dispatch error")
 
     async def _cancel(self, ctx: TicketContext) -> None:
         token = await self._token(ctx)
@@ -223,6 +279,9 @@ class ActionRunner:
                 seen.add(run_id)
                 await self.github.cancel_workflow_run(token, ctx.owner, ctx.repo, run_id)
                 cancelled.append(run)
+
+        if not cancelled:
+            return
 
         await self.set_state(ctx, token, None)
         dest = ctx.to_column or "another column"

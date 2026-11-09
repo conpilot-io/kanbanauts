@@ -7,6 +7,7 @@ from kanbanauts.core.caller import (
     CALLER_VERSION,
     ENGINES,
     PHASES,
+    caller_accepts_source,
     parse_caller_version,
     render_caller_workflow,
     render_config,
@@ -173,3 +174,11 @@ def test_render_config_candidates() -> None:
     )
     assert "Several org Projects" in text
     assert "YOUR_ORG" in text
+
+
+def test_caller_accepts_source_by_version() -> None:
+    assert caller_accepts_source(None) is True
+    assert caller_accepts_source("") is True
+    assert caller_accepts_source(render_caller_workflow()) is True
+    assert caller_accepts_source("# kanbanauts-caller: 5\n") is False
+    assert caller_accepts_source("name: Kanbanauts\n    source:\n") is True

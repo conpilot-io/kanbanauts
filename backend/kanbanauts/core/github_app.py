@@ -173,6 +173,27 @@ class GitHubApp:
             {"body": body},
         )
 
+    async def list_issue_comments(
+        self,
+        token: str,
+        owner: str,
+        repo: str,
+        issue_number: int,
+        *,
+        since: str | None = None,
+    ) -> list[str]:
+        """Recent issue comment bodies. `since` is an ISO-8601 timestamp."""
+        params: dict[str, Any] = {"per_page": 100}
+        if since:
+            params["since"] = since
+        data = await self.get(
+            f"/repos/{owner}/{repo}/issues/{issue_number}/comments",
+            token,
+            params=params,
+        )
+        assert isinstance(data, list)
+        return [str(item.get("body") or "") for item in data if isinstance(item, dict)]
+
     async def add_comment_reaction(
         self,
         token: str,
@@ -481,10 +502,7 @@ query($owner: String!, $number: Int!) {
 """
 
 # field(name:) requires a variable — define a proper query:
-PROJECT_STATUS_FIELD_QUERY = """
-query($owner: String!, $number: Int!) {
-  organization(login: $owner) {
-    projectV2(number: $number) {
+_PROJECT_FIELDS = """
       id
       fields(first: 50) {
         nodes {
@@ -493,6 +511,60 @@ query($owner: String!, $number: Int!) {
             id
             name
             options { id name }
+          }
+        }
+      }
+"""
+
+PROJECT_STATUS_FIELD_QUERY = f"""
+query($owner: String!, $number: Int!) {{
+  organization(login: $owner) {{
+    projectV2(number: $number) {{
+{_PROJECT_FIELDS}
+    }}
+  }}
+}}
+"""
+
+USER_PROJECT_STATUS_FIELD_QUERY = f"""
+query($owner: String!, $number: Int!) {{
+  user(login: $owner) {{
+    projectV2(number: $number) {{
+{_PROJECT_FIELDS}
+    }}
+  }}
+}}
+"""
+
+ISSUE_PROJECT_ITEMS_QUERY = """
+query($id: ID!) {
+  node(id: $id) {
+    ... on Issue {
+      projectItems(first: 20, includeArchived: false) {
+        nodes {
+          id
+          project {
+            number
+            owner {
+              __typename
+              ... on Organization { login }
+              ... on User { login }
+            }
+          }
+        }
+      }
+    }
+    ... on PullRequest {
+      projectItems(first: 20, includeArchived: false) {
+        nodes {
+          id
+          project {
+            number
+            owner {
+              __typename
+              ... on Organization { login }
+              ... on User { login }
+            }
           }
         }
       }

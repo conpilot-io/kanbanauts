@@ -131,3 +131,23 @@ async def test_cancel_filters_by_issue() -> None:
     await runner.run_one(ctx, CancelAction(cancel=True))
     assert gh.cancelled == [1]
     assert any("Stopped" in c for c in gh.comments)
+
+
+@pytest.mark.asyncio
+async def test_cancel_with_no_runs_is_quiet() -> None:
+    cfg = load_config_yaml(SAMPLE_CONFIG)
+    gh = _Gh()
+    gh.labels.add("agent:succeeded")
+    runner = ActionRunner(github=gh, config=cfg)
+    ctx = TicketContext(
+        owner="acme",
+        repo="app",
+        issue_number=1,
+        installation_id=1,
+        labels=set(gh.labels),
+        to_column="Tests",
+    )
+    await runner.run_one(ctx, CancelAction(cancel=True))
+    assert gh.cancelled == []
+    assert gh.comments == []
+    assert "agent:succeeded" in gh.labels

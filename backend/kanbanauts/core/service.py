@@ -5,11 +5,12 @@ from __future__ import annotations
 import json
 import logging
 import re
+import time
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
-from kanbanauts.core.actions import ActionRunner, TicketContext
+from kanbanauts.core.actions import ActionRunner, DispatchError, TicketContext
 from kanbanauts.core.broker import BROKER_PERMISSIONS, OidcError, TokenBroker
 from kanbanauts.core.commands import (
     HELP_TEXT,
@@ -22,9 +23,16 @@ from kanbanauts.core.commands import (
 from kanbanauts.core.config import KanbanautsConfig, load_config_yaml
 from kanbanauts.core.filters import filter_ticket, validate_column_names
 from kanbanauts.core.github_app import (
+    ISSUE_PROJECT_ITEMS_QUERY,
     ITEM_WITH_CONTENT_QUERY,
     PROJECT_STATUS_FIELD_QUERY,
+    USER_PROJECT_STATUS_FIELD_QUERY,
     GitHubApp,
+)
+from kanbanauts.core.grants import (
+    grant_comment_allows,
+    grant_since_iso,
+    make_grant_comment,
 )
 from kanbanauts.core.ports import HttpRequest, HttpResponse
 from kanbanauts.core.state import AgentState, current_state, is_active, parse_run_name
@@ -100,12 +108,21 @@ class KanbanautsService:
         self, token: str, config: KanbanautsConfig
     ) -> tuple[str, str, dict[str, str], set[str]]:
         """Return (project_id, field_id, options_by_name_folded, option_names)."""
+        query = (
+            USER_PROJECT_STATUS_FIELD_QUERY
+            if config.project_owner_type == "users"
+            else PROJECT_STATUS_FIELD_QUERY
+        )
         data = await self.github.graphql(
             token,
-            PROJECT_STATUS_FIELD_QUERY,
+            query,
             {"owner": config.project_owner, "number": config.project_number},
         )
-        project = data["organization"]["projectV2"]
+        org = data.get("organization") if isinstance(data.get("organization"), dict) else {}
+        user = data.get("user") if isinstance(data.get("user"), dict) else {}
+        project = (org or {}).get("projectV2") or (user or {}).get("projectV2")
+        if not isinstance(project, dict):
+            raise ValueError("project not found")
         project_id = str(project["id"])
         field_id = ""
         options: dict[str, str] = {}
@@ -219,18 +236,21 @@ class KanbanautsService:
         )
         runner = ActionRunner(github=self.github, config=config)
 
-        # on_leave for the previous column
-        if from_name:
-            from_cfg = config.column(from_name)
-            if from_cfg and from_cfg.on_leave:
-                await runner.run_actions(ctx, from_cfg.on_leave)
+        try:
+            # on_leave for the previous column
+            if from_name:
+                from_cfg = config.column(from_name)
+                if from_cfg and from_cfg.on_leave:
+                    await runner.run_actions(ctx, from_cfg.on_leave)
 
-        # on_enter for the new column
-        to_cfg = config.column(to_name)
-        if to_cfg is None:
-            return HttpResponse.json(200, {"ok": True, "ignored": "unconfigured_column"})
-        if to_cfg.on_enter:
-            await runner.run_actions(ctx, to_cfg.on_enter)
+            # on_enter for the new column
+            to_cfg = config.column(to_name)
+            if to_cfg is None:
+                return HttpResponse.json(200, {"ok": True, "ignored": "unconfigured_column"})
+            if to_cfg.on_enter:
+                await runner.run_actions(ctx, to_cfg.on_enter)
+        except DispatchError:
+            return HttpResponse.json(200, {"ok": False, "error": "dispatch_failed"})
 
         return HttpResponse.json(
             200,
@@ -274,6 +294,7 @@ class KanbanautsService:
         repo = str(repo_obj.get("name") or "")
         issue = payload.get("issue") or {}
         issue_number = int(issue.get("number") or 0)
+        thread_number = issue_number
         user = str(comment_user.get("login") or "")
         is_pr = bool(issue.get("pull_request"))
         comment_id = int(comment.get("id") or 0)
@@ -302,24 +323,51 @@ class KanbanautsService:
             )
             return HttpResponse.json(200, {"ok": False, "error": "forbidden"})
 
-        if comment_id:
-            try:
-                await self.github.add_comment_reaction(
-                    token, owner, repo, comment_id, "eyes"
-                )
-            except Exception:  # noqa: BLE001
-                logger.exception("failed to add eyes reaction")
+        if is_pr and parsed.name in (CommandName.PLAN, CommandName.DO, CommandName.DOIT):
+            await self.github.add_issue_comment(
+                token,
+                owner,
+                repo,
+                issue_number,
+                f"@{user} run `/ai {parsed.name.value}` on the **issue**, not on the pull request.",
+            )
+            return HttpResponse.json(200, {"ok": False, "error": "use_issue"})
 
-        labels = {str(lbl["name"]) for lbl in (issue.get("labels") or []) if isinstance(lbl, dict)}
-        # Also refresh from API for accuracy
-        labels |= await self.github.list_issue_labels(token, owner, repo, issue_number)
+        if is_pr and parsed.name in (
+            CommandName.REVIEW,
+            CommandName.RETRY,
+            CommandName.CANCEL,
+            CommandName.STATUS,
+        ):
+            linked = _closing_issue_number(str(issue.get("body") or ""))
+            if linked is None:
+                pr_data = await self.github.get(
+                    f"/repos/{owner}/{repo}/issues/{issue_number}", token
+                )
+                linked = _closing_issue_number(str(pr_data.get("body") or ""))
+            if linked is None:
+                await self.github.add_issue_comment(
+                    token,
+                    owner,
+                    repo,
+                    issue_number,
+                    f"@{user} add `Closes #<issue>` to the pull request, then run the command again.",
+                )
+                return HttpResponse.json(200, {"ok": False, "error": "no_linked_issue"})
+            issue_number = linked
+            labels = await self.github.list_issue_labels(token, owner, repo, issue_number)
+        else:
+            labels = {
+                str(lbl["name"]) for lbl in (issue.get("labels") or []) if isinstance(lbl, dict)
+            }
+            labels |= await self.github.list_issue_labels(token, owner, repo, issue_number)
 
         if config.skip_label in labels:
             await self.github.add_issue_comment(
                 token,
                 owner,
                 repo,
-                issue_number,
+                thread_number,
                 f"skipped: ticket has `{config.skip_label}`",
             )
             return HttpResponse.json(200, {"ok": True, "ignored": "skip_label"})
@@ -336,6 +384,31 @@ class KanbanautsService:
             source="command",
         )
         runner = ActionRunner(github=self.github, config=config)
+
+        phase: str | None
+        if parsed.name == CommandName.RETRY:
+            # Retry last failed: re-run the phase named in args or default to plan.
+            phase = parsed.args.strip().casefold() or "plan"
+            if phase == "do":
+                phase = "doit"
+            if phase not in config.phases:
+                phase = "plan"
+        elif parsed.name in (CommandName.HELP, CommandName.STATUS, CommandName.CANCEL):
+            phase = None
+        else:
+            phase = phase_for_command(parsed.name)
+
+        if phase and is_active(labels):
+            await self.github.add_issue_comment(
+                token,
+                owner,
+                repo,
+                thread_number,
+                "An agent is already queued or running. Use `/ai cancel` first.",
+            )
+            return HttpResponse.json(200, {"ok": False, "error": "busy"})
+
+        await self._ack_command(token, owner, repo, comment_id)
 
         if parsed.name == CommandName.HELP:
             await self.github.add_issue_comment(token, owner, repo, issue_number, HELP_TEXT)
@@ -362,44 +435,44 @@ class KanbanautsService:
             await runner.run_one(ctx, CancelAction(cancel=True))
             return HttpResponse.json(200, {"ok": True, "command": "cancel"})
 
-        phase: str | None
-        if parsed.name == CommandName.RETRY:
-            # Retry last failed: re-run the phase named in args or default to plan.
-            phase = parsed.args.strip().casefold() or "plan"
-            if phase == "do":
-                phase = "doit"
-            if phase not in config.phases:
-                phase = "plan"
-        else:
-            phase = phase_for_command(parsed.name)
-
-        if phase in ("plan", "doit") and is_pr:
+        if phase:
             await self.github.add_issue_comment(
                 token,
                 owner,
                 repo,
                 issue_number,
-                f"@{user} run `/ai {phase}` on the **issue**, not on the pull request.",
+                make_grant_comment(
+                    secret=self.settings.webhook_secret,
+                    owner=owner,
+                    repo=repo,
+                    issue_number=issue_number,
+                    phase=phase,
+                    now=time.time(),
+                ),
             )
-            return HttpResponse.json(200, {"ok": False, "error": "use_issue"})
-
-        if phase:
-            if is_active(labels):
-                await self.github.add_issue_comment(
-                    token,
-                    owner,
-                    repo,
-                    issue_number,
-                    "An agent is already queued or running. Use `/ai cancel` first.",
-                )
-                return HttpResponse.json(200, {"ok": False, "error": "busy"})
-            await runner._run_phase(ctx, phase)
+            try:
+                await runner._run_phase(ctx, phase)
+            except DispatchError:
+                return HttpResponse.json(200, {"ok": False, "error": "dispatch_failed"})
             return HttpResponse.json(
                 200,
                 {"ok": True, "command": parsed.name.value, "phase": phase},
             )
 
         return HttpResponse.json(200, {"ok": True, "ignored": "unhandled_command"})
+
+    async def _ack_command(
+        self, token: str, owner: str, repo: str, comment_id: int
+    ) -> None:
+        """Add the eyes reaction only after the command is accepted."""
+        if not comment_id:
+            return
+        try:
+            await self.github.add_comment_reaction(
+                token, owner, repo, comment_id, "eyes"
+            )
+        except Exception:  # noqa: BLE001
+            logger.exception("failed to add eyes reaction")
 
     # ------------------------------------------------------------------
     # pull_request_review
@@ -513,7 +586,15 @@ class KanbanautsService:
                     if isinstance(action, RunAction) and action.run == phase:
                         phase_col = col_name
                         break
-            if current_col and phase_col and current_col.casefold() != phase_col.casefold():
+            # A column move already cleared the agent label. A comment run
+            # that is still active was cancelled from the Actions page.
+            labels = await self.github.list_issue_labels(token, owner, repo, issue_number)
+            off_column = bool(
+                current_col
+                and phase_col
+                and current_col.casefold() != phase_col.casefold()
+            )
+            if off_column and not is_active(labels):
                 return HttpResponse.json(200, {"ok": True, "ignored": "intentional_cancel"})
 
         # failure / timed_out / cancelled-while-still-in-column / etc.
@@ -566,27 +647,23 @@ class KanbanautsService:
     ) -> str | None:
         if not config.has_project:
             return None
-        query = """
-        query($owner: String!, $number: Int!) {
-          organization(login: $owner) {
-            projectV2(number: $number) {
-              items(first: 100) {
-                nodes {
-                  id
-                  content { ... on Issue { id } }
-                }
-              }
-            }
-          }
-        }
-        """
         data = await self.github.graphql(
-            token, query, {"owner": config.project_owner, "number": config.project_number}
+            token, ISSUE_PROJECT_ITEMS_QUERY, {"id": issue_node_id}
         )
-        for node in data["organization"]["projectV2"]["items"]["nodes"]:
-            content = node.get("content") or {}
-            if content.get("id") == issue_node_id:
-                return str(node["id"])
+        node = data.get("node") or {}
+        items = (node.get("projectItems") or {}).get("nodes") or []
+        want_owner = config.project_owner.casefold()
+        want_number = config.project_number
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            project = item.get("project") or {}
+            owner_login = str((project.get("owner") or {}).get("login") or "")
+            if (
+                project.get("number") == want_number
+                and owner_login.casefold() == want_owner
+            ):
+                return str(item["id"])
         return None
 
     async def handle_installation(
@@ -723,7 +800,7 @@ class KanbanautsService:
         if status == "succeeded":
             await runner.set_state(ctx, token, AgentState.SUCCEEDED)
             # Find column for this phase and run on_success (only if on the board).
-            for _col_name, col_cfg in config.columns.items():
+            for col_name, col_cfg in config.columns.items():
                 from kanbanauts.core.config import RunAction
 
                 for action in col_cfg.on_enter:
@@ -731,12 +808,12 @@ class KanbanautsService:
                         if col_cfg.on_success:
                             await self._maybe_run_column_action(
                                 runner, ctx, token, config, owner, repo, issue_number,
-                                col_cfg.on_success,
+                                col_name, col_cfg.on_success,
                             )
                         break
         elif status == "no_code":
             await runner.set_state(ctx, token, AgentState.SUCCEEDED)
-            for _col_name, col_cfg in config.columns.items():
+            for col_name, col_cfg in config.columns.items():
                 from kanbanauts.core.config import RunAction
 
                 for action in col_cfg.on_enter:
@@ -744,7 +821,7 @@ class KanbanautsService:
                         if col_cfg.on_no_code:
                             await self._maybe_run_column_action(
                                 runner, ctx, token, config, owner, repo, issue_number,
-                                col_cfg.on_no_code,
+                                col_name, col_cfg.on_no_code,
                             )
                         break
         elif status == "blocked":
@@ -784,9 +861,10 @@ class KanbanautsService:
         owner: str,
         repo: str,
         issue_number: int,
+        column_name: str,
         action: Any,
     ) -> None:
-        """Run on_success / on_no_code only when the issue is on the configured board."""
+        """Run on_success / on_no_code only when the issue is in that column."""
         if not config.has_project:
             return
         try:
@@ -805,6 +883,19 @@ class KanbanautsService:
                     owner,
                     repo,
                     issue_number,
+                )
+                return
+            current_col = await self._current_column_for_issue(
+                token, config, owner, repo, issue_number
+            )
+            if current_col is None or current_col.casefold() != column_name.casefold():
+                logger.info(
+                    "skip column action: %s/%s#%s is in %s, action belongs to %s",
+                    owner,
+                    repo,
+                    issue_number,
+                    current_col,
+                    column_name,
                 )
                 return
             ctx.project_id = project_id
@@ -837,8 +928,38 @@ class KanbanautsService:
         if config is None:
             return HttpResponse.json(200, {"ok": True, "skip": True, "reason": "no_config"})
 
+        labels = await self.github.list_issue_labels(
+            token, claims.owner, claims.repo, issue_number
+        )
+        if config.skip_label in labels:
+            return HttpResponse.json(
+                200, {"ok": True, "skip": True, "reason": "skip_label"}
+            )
+
         # Comment-triggered runs do not require the issue to be in a column.
-        if source != "command":
+        # `source=command` is honored only with a grant the app posted.
+        if source == "command":
+            now = time.time()
+            comments = await self.github.list_issue_comments(
+                token,
+                claims.owner,
+                claims.repo,
+                issue_number,
+                since=grant_since_iso(now),
+            )
+            if not grant_comment_allows(
+                secret=self.settings.webhook_secret,
+                owner=claims.owner,
+                repo=claims.repo,
+                issue_number=issue_number,
+                phase=phase,
+                comments=comments,
+                now=now,
+            ):
+                return HttpResponse.json(
+                    200, {"ok": True, "skip": True, "reason": "no_command_grant"}
+                )
+        else:
             if not config.has_project:
                 return HttpResponse.json(
                     200, {"ok": True, "skip": True, "reason": "no_project"}
@@ -870,9 +991,6 @@ class KanbanautsService:
                     },
                 )
         # Mark running
-        labels = await self.github.list_issue_labels(
-            token, claims.owner, claims.repo, issue_number
-        )
         ctx = TicketContext(
             owner=claims.owner,
             repo=claims.repo,

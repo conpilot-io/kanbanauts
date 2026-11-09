@@ -3,6 +3,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import yaml
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 WORKFLOWS_DIR = REPO_ROOT / ".github" / "workflows"
 
@@ -75,3 +77,21 @@ def test_lock_files_have_no_runtime_imports_or_author_file() -> None:
         text = (WORKFLOWS_DIR / name).read_text(encoding="utf-8")
         assert "runtime-import" not in text, name
         assert "author_file" not in text, name
+
+
+def test_safe_outputs_job_grants_id_token_write() -> None:
+    """safe_outputs mints a Kanbanauts token via OIDC and needs id-token: write.
+
+    A job permissions block replaces workflow permissions. Without id-token,
+    GitHub omits ACTIONS_ID_TOKEN_REQUEST_TOKEN and the mint step fails under
+    `set -u` with an unbound-variable error.
+    """
+    locks = sorted(WORKFLOWS_DIR.glob("agent-*.lock.yml"))
+    assert locks, "no lock files found"
+    for path in locks:
+        lock = yaml.safe_load(path.read_text(encoding="utf-8"))
+        job = (lock.get("jobs") or {}).get("safe_outputs") or {}
+        perms = job.get("permissions") or {}
+        assert perms.get("id-token") == "write", (
+            f"{path.name} safe_outputs permissions={perms}"
+        )

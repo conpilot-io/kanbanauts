@@ -29,6 +29,8 @@ pre-steps:
 
 jobs:
   safe_outputs:
+    permissions:
+      id-token: write
     pre-steps:
       - name: Mint Kanbanauts token
         id: kanban

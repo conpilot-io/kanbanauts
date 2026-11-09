@@ -25,6 +25,7 @@ columns:
     on_leave: [{ cancel: true }]
     on_success: { move_to: Review }
   Review:
+    on_success: { move_to: Tests }
     on_pr_approved: { move_to: Tests }
   Tests:
     on_enter: []

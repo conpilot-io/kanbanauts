@@ -83,6 +83,42 @@ def test_review_prompt_uses_plain_markers() -> None:
     assert "When no plan comment exists" in text
 
 
+def test_doit_prompt_requires_structured_comment_sections() -> None:
+    text = (PROMPTS_DIR / "doit.md").read_text(encoding="utf-8")
+    assert "## TL;DR" in text
+    assert "## What changed" in text
+    assert "## Test instructions" in text
+    assert "## Next step" in text
+    assert "Do regression testing" in text
+    assert "No testing applied" in text
+    assert "step-by-step" in text
+    assert "#aw_..." in text
+
+
+def test_review_prompt_requires_issue_comment_and_outcomes() -> None:
+    text = (PROMPTS_DIR / "review.md").read_text(encoding="utf-8")
+    assert "Always call `add_comment`" in text
+    assert "required, never optional" in text
+    assert "## Reproduction steps" in text
+    assert "user-facing" in text
+    assert "only when it makes sense" in text
+    assert "## Test instructions" in text
+    assert "Do regression testing" in text
+    assert "No testing applied" in text
+    assert "status=succeeded" in text
+    assert "status=blocked" in text
+    assert "status=failed" in text
+
+
+def test_comment_style_documents_test_and_reproduction_rules() -> None:
+    text = (PROMPTS_DIR / "comment-style.md").read_text(encoding="utf-8")
+    assert "Test instructions" in text
+    assert "Reproduction steps" in text
+    assert "user-facing" in text
+    assert "Do regression testing" in text
+    assert "No testing applied" in text
+
+
 def test_agent_sources_import_comment_style() -> None:
     sources = sorted(WORKFLOWS_DIR.glob("agent-*.md"))
     assert sources, "no agent markdown sources found"

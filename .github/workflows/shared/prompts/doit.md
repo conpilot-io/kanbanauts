@@ -74,11 +74,20 @@ Instructions:
      push and open a draft with `create_pull_request`. Reference the issue
      with `Closes #<issue-number>`.
 
-7. Call `add_comment` with:
-   - TL;DR (what was done, in plain language)
-   - What changed (short bullets)
-   - PR link (the existing PR when reusing, or the new draft)
-   - **Next step**: Comment `/ai review` to start the AI review.
+7. Call `add_comment` with these markdown sections (use headings and bullets):
+   - `## TL;DR` — 3-5 plain-language bullets on what was done. Include the PR
+     link (the existing PR when reusing, or the new draft). Do not write temporary
+     ids such as `#aw_...` as the PR link; use the real PR URL or number when
+     known, otherwise write "Draft PR opened" without a broken placeholder.
+   - `## What changed` — short bullet points listing the concrete changes.
+   - `## Test instructions` —
+     - If a user can test the change on the frontend / UI: step-by-step
+       instructions on how to test the change in the product.
+     - If the change affects backend or shared runtime behavior that a user
+       cannot test step-by-step on the frontend: write `Do regression testing`.
+     - If the change is internal only (unit tests, docs, CI/scripts, or other
+       non-user-facing work): write `No testing applied`.
+   - `## Next step` — Comment `/ai review` to start the AI review.
 8. Call `kanban_report` with `status=succeeded`.
    - When reusing: pass the numeric `pr_number` (`KANBANAUTS_EXISTING_PR`).
    - When creating a new PR: Omit `pr_number`. The workflow fills the real

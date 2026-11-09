@@ -82,4 +82,8 @@ If `KANBANAUTS_SKIP` is `1`, do nothing and exit.
 Otherwise review the draft PR. Follow the imported prompt.
 Use `create_pull_request_review_comment` and `submit_pull_request_review`
 (event COMMENT only — never APPROVE or REQUEST_CHANGES).
-Call `kanban_report` with status `succeeded`, `blocked`, or `failed`.
+Always post an issue comment: Test instructions when clean, or Findings when
+issues are found. Add Reproduction steps only for user-facing blocker/major
+findings.
+Call `kanban_report` with status `succeeded` (clean), `blocked` (findings),
+or `failed` (could not review).

@@ -163,6 +163,7 @@ def test_render_config_defaults_no_phases() -> None:
     assert "phases:" not in text
     assert "project: https://github.com/orgs/acme/projects/1" in text
     assert "on_enter: [{ run: review }]" in text
+    assert "on_success: { move_to: Tests }" in text
 
 
 def test_render_config_candidates() -> None:

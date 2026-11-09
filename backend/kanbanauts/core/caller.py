@@ -150,6 +150,7 @@ def render_config(
               Review:
                 on_enter: [{{ run: review }}]
                 on_leave: [{{ cancel: true }}]
+                on_success: {{ move_to: Tests }}
                 on_pr_approved: {{ move_to: Tests }}
               Tests:
                 on_enter: []

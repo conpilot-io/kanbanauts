@@ -1012,10 +1012,13 @@ async def test_enter_review_dispatches_review(
 ) -> None:
     svc, gh, _key = service
     gh.config_text = SAMPLE_CONFIG.replace(
-        "  Review:\n    on_pr_approved: { move_to: Tests }",
+        "  Review:\n"
+        "    on_success: { move_to: Tests }\n"
+        "    on_pr_approved: { move_to: Tests }",
         "  Review:\n"
         "    on_enter: [{ run: review }]\n"
         "    on_leave: [{ cancel: true }]\n"
+        "    on_success: { move_to: Tests }\n"
         "    on_pr_approved: { move_to: Tests }",
     )
     resp = await _post_webhook(
@@ -1033,10 +1036,13 @@ async def test_leave_review_without_run_stays_quiet(
 ) -> None:
     svc, gh, _key = service
     gh.config_text = SAMPLE_CONFIG.replace(
-        "  Review:\n    on_pr_approved: { move_to: Tests }",
+        "  Review:\n"
+        "    on_success: { move_to: Tests }\n"
+        "    on_pr_approved: { move_to: Tests }",
         "  Review:\n"
         "    on_enter: [{ run: review }]\n"
         "    on_leave: [{ cancel: true }]\n"
+        "    on_success: { move_to: Tests }\n"
         "    on_pr_approved: { move_to: Tests }",
     )
     gh.labels.add("agent:succeeded")
@@ -1048,6 +1054,149 @@ async def test_leave_review_without_run_stays_quiet(
     assert not any("Stopped" in c for c in gh.comments)
     assert "agent:succeeded" in gh.labels
     assert not gh.dispatched
+
+
+@pytest.mark.asyncio
+async def test_report_review_succeeded_moves_to_tests(
+    service: tuple[KanbanautsService, FakeGitHub, Any],
+) -> None:
+    from tests.helpers_oidc import make_oidc_token
+
+    svc, gh, key = service
+    _install_client(svc)
+    gh.current_column = "Review"
+    oidc = make_oidc_token(key, aud=svc.settings.oidc_audience)
+    body = json.dumps(
+        {
+            "status": "succeeded",
+            "phase": "review",
+            "issue_number": 42,
+            "oidc_token": oidc,
+        }
+    ).encode()
+    req = HttpRequest(method="POST", path="/report", headers={}, body=body)
+    resp = await svc.handle_http(req)
+    assert resp.status == 200
+    assert "agent:succeeded" in gh.labels
+    assert gh.moved_to == ["Tests"]
+
+
+@pytest.mark.asyncio
+async def test_report_review_succeeded_moves_to_test_singular(
+    service: tuple[KanbanautsService, FakeGitHub, Any],
+) -> None:
+    from tests.helpers_oidc import make_oidc_token
+
+    svc, gh, key = service
+    _install_client(svc)
+    # Board uses singular "Test"; Review config has no on_success.
+    gh.config_text = SAMPLE_CONFIG.replace(
+        "  Review:\n"
+        "    on_success: { move_to: Tests }\n"
+        "    on_pr_approved: { move_to: Tests }",
+        "  Review:\n    on_pr_approved: { move_to: Tests }",
+    ).replace(
+        "  Tests:\n    on_enter: []",
+        "  Test:\n    on_enter: []",
+    )
+    gh.field_options = ["Backlog", "Plan", "DoIt", "Review", "Test", "Done"]
+    gh.current_column = "Review"
+    oidc = make_oidc_token(key, aud=svc.settings.oidc_audience)
+    body = json.dumps(
+        {
+            "status": "succeeded",
+            "phase": "review",
+            "issue_number": 42,
+            "oidc_token": oidc,
+        }
+    ).encode()
+    req = HttpRequest(method="POST", path="/report", headers={}, body=body)
+    resp = await svc.handle_http(req)
+    assert resp.status == 200
+    assert gh.moved_to == ["Test"]
+
+
+@pytest.mark.asyncio
+async def test_report_review_succeeded_without_on_enter(
+    service: tuple[KanbanautsService, FakeGitHub, Any],
+) -> None:
+    from tests.helpers_oidc import make_oidc_token
+
+    svc, gh, key = service
+    _install_client(svc)
+    # Matches customer configs that only set on_pr_approved on Review.
+    gh.config_text = SAMPLE_CONFIG.replace(
+        "  Review:\n"
+        "    on_success: { move_to: Tests }\n"
+        "    on_pr_approved: { move_to: Tests }",
+        "  Review:\n    on_pr_approved: { move_to: Tests }",
+    )
+    gh.current_column = "Review"
+    oidc = make_oidc_token(key, aud=svc.settings.oidc_audience)
+    body = json.dumps(
+        {
+            "status": "succeeded",
+            "phase": "review",
+            "issue_number": 42,
+            "oidc_token": oidc,
+        }
+    ).encode()
+    req = HttpRequest(method="POST", path="/report", headers={}, body=body)
+    resp = await svc.handle_http(req)
+    assert resp.status == 200
+    assert "agent:succeeded" in gh.labels
+    assert gh.moved_to == ["Tests"]
+
+
+@pytest.mark.asyncio
+async def test_report_review_blocked_keeps_column(
+    service: tuple[KanbanautsService, FakeGitHub, Any],
+) -> None:
+    from tests.helpers_oidc import make_oidc_token
+
+    svc, gh, key = service
+    _install_client(svc)
+    gh.current_column = "Review"
+    oidc = make_oidc_token(key, aud=svc.settings.oidc_audience)
+    body = json.dumps(
+        {
+            "status": "blocked",
+            "phase": "review",
+            "issue_number": 42,
+            "oidc_token": oidc,
+        }
+    ).encode()
+    req = HttpRequest(method="POST", path="/report", headers={}, body=body)
+    resp = await svc.handle_http(req)
+    assert resp.status == 200
+    assert "agent:blocked" in gh.labels
+    assert gh.moved_to == []
+    assert gh.current_column == "Review"
+
+
+@pytest.mark.asyncio
+async def test_report_review_succeeded_skips_when_already_in_tests(
+    service: tuple[KanbanautsService, FakeGitHub, Any],
+) -> None:
+    from tests.helpers_oidc import make_oidc_token
+
+    svc, gh, key = service
+    _install_client(svc)
+    gh.current_column = "Tests"
+    oidc = make_oidc_token(key, aud=svc.settings.oidc_audience)
+    body = json.dumps(
+        {
+            "status": "succeeded",
+            "phase": "review",
+            "issue_number": 42,
+            "oidc_token": oidc,
+        }
+    ).encode()
+    req = HttpRequest(method="POST", path="/report", headers={}, body=body)
+    resp = await svc.handle_http(req)
+    assert resp.status == 200
+    assert "agent:succeeded" in gh.labels
+    assert gh.moved_to == []
 
 
 @pytest.mark.asyncio

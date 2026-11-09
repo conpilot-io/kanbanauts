@@ -48,22 +48,56 @@ Instructions:
    - Are there clear bugs, security issues, or missing edge cases?
    - Is the scope too large or off-plan?
 
-5. Post the review:
+5. Decide the review outcome:
+   - Clean review: no blocker or major findings.
+   - Findings review: one or more blocker or major findings that need code changes.
+   - Minor-only notes do not block a clean review.
+
+6. Post the PR review:
    - Use `create_pull_request_review_comment` for up to a few specific line notes
      (pass `pull_request_number`).
    - Use `submit_pull_request_review` once with event `COMMENT` (never `APPROVE`
      or `REQUEST_CHANGES`). Pass `pull_request_number`. Start the review body with
      the line `kanbanauts-review`, then include:
-     1. TL;DR — 3-5 bullets on what the PR does and overall risk (plain language)
-     2. Findings — bullets with severity (blocker/major/minor), file/area, short why
-     3. Test gaps — what should be covered but is not, or "looks covered" / "no test needed"
-     4. Overall recommendation — one line
-     5. Next step — from the shared matrix (clean → approve/merge in GitHub;
+     1. `## TL;DR` — 3-5 bullets on what the PR does and overall risk (plain language)
+     2. `## Findings` — bullets with severity (blocker/major/minor), file/area, short
+        why; or `None.` when clean
+     3. `## Reproduction steps` — only when it makes sense: include this section
+        for a finding that is both severity blocker or major **and** user-facing
+        (a person can trigger it in the product UI). Give step-by-step steps for
+        those findings only. Omit the section for clean reviews, minor findings,
+        internal/code-only issues, missing tests, style notes, or anything a user
+        cannot reproduce in the product.
+     4. `## Test gaps` — what should be covered but is not, or "Looks covered" /
+        "No test needed"
+     5. `## Overall recommendation` — one line
+     6. `## Next step` — from the shared matrix (clean → approve/merge in GitHub;
         findings → on the **issue**, comment `/ai doit <what to fix>`)
-   - Optionally call `add_comment` on the issue with a one-line summary, the PR link,
-     and the same **Next step**.
 
-6. Call `kanban_report` with `status=succeeded` (or `failed` if you could not review).
+7. Always call `add_comment` on the **issue** (required, never optional):
+   - When the review is clean (everything is OK):
+     1. `## TL;DR` — 3-5 bullets confirming the review passed and linking the PR
+     2. `## Test instructions` —
+        - If a user can test the change on the frontend / UI: step-by-step Q&A /
+          QA instructions on how to test the change in the product.
+        - If the change affects backend or shared runtime behavior that a user
+          cannot test step-by-step on the frontend: write `Do regression testing`.
+        - If the change is internal only (unit tests, docs, CI/scripts, or other
+          non-user-facing work): write `No testing applied`.
+     3. `## Next step` — Approve and merge the PR in GitHub when ready.
+   - When the review has blocker or major findings:
+     1. `## TL;DR` — 3-5 bullets summarizing the issues found and linking the PR review
+     2. `## Findings` — each finding with severity and a short why
+     3. `## Reproduction steps` — only for findings that are both blocker/major
+        **and** user-facing (reproducible in the product UI). Omit this section
+        when no finding meets that bar (for example missing unit tests, internal
+        refactors, or code-only defects).
+     4. `## Next step` — On the **issue**, comment `/ai doit <what to fix>`.
+
+8. Call `kanban_report`:
+   - Clean review → `status=succeeded`
+   - Findings that need code changes → `status=blocked`
+   - Could not review → `status=failed`
 
 If the triggering comment has extra instructions after the command, honor them within
 the read-only review scope.

@@ -805,18 +805,31 @@ class KanbanautsService:
 
         if status == "succeeded":
             await runner.set_state(ctx, token, AgentState.SUCCEEDED)
-            # Find column for this phase and run on_success (only if on the board).
-            for col_name, col_cfg in config.columns.items():
-                from kanbanauts.core.config import RunAction
+            if phase == "review":
+                # Clean AI review: move to Tests/Test when the issue is on the board.
+                await self._maybe_move_after_clean_review(
+                    runner, ctx, token, config, owner, repo, issue_number
+                )
+            else:
+                # Find column for this phase and run on_success (only if on the board).
+                for col_name, col_cfg in config.columns.items():
+                    from kanbanauts.core.config import RunAction
 
-                for action in col_cfg.on_enter:
-                    if isinstance(action, RunAction) and action.run == phase:
-                        if col_cfg.on_success:
-                            await self._maybe_run_column_action(
-                                runner, ctx, token, config, owner, repo, issue_number,
-                                col_name, col_cfg.on_success,
-                            )
-                        break
+                    for action in col_cfg.on_enter:
+                        if isinstance(action, RunAction) and action.run == phase:
+                            if col_cfg.on_success:
+                                await self._maybe_run_column_action(
+                                    runner,
+                                    ctx,
+                                    token,
+                                    config,
+                                    owner,
+                                    repo,
+                                    issue_number,
+                                    col_name,
+                                    col_cfg.on_success,
+                                )
+                            break
         elif status == "no_code":
             await runner.set_state(ctx, token, AgentState.SUCCEEDED)
             for col_name, col_cfg in config.columns.items():
@@ -910,6 +923,84 @@ class KanbanautsService:
             ctx.item_node_id = item_id
         except Exception:  # noqa: BLE001
             logger.exception("project context for column action")
+            return
+        await runner.run_one(ctx, action)
+
+    async def _maybe_move_after_clean_review(
+        self,
+        runner: ActionRunner,
+        ctx: TicketContext,
+        token: str,
+        config: KanbanautsConfig,
+        owner: str,
+        repo: str,
+        issue_number: int,
+    ) -> None:
+        """Move a clean AI review to Tests/Test when the issue is on the board.
+
+        Unlike column on_success, this path works when Review has no
+        ``on_enter: [{ run: review }]`` and when the run was started by
+        ``/ai review`` while the card is already in Review (or another
+        non-terminal column).
+        """
+        if not config.has_project:
+            return
+        from kanbanauts.core.config import MoveToAction
+
+        try:
+            project_id, field_id, options, option_names = await self.project_field_context(
+                token, config
+            )
+            issue_data = await self.github.get(
+                f"/repos/{owner}/{repo}/issues/{issue_number}", token
+            )
+            item_id = await self._find_project_item(
+                token, config, str(issue_data["node_id"])
+            )
+            if not item_id:
+                logger.info(
+                    "skip review move: %s/%s#%s not on board",
+                    owner,
+                    repo,
+                    issue_number,
+                )
+                return
+            current_col = await self._current_column_for_issue(
+                token, config, owner, repo, issue_number
+            )
+            if current_col and current_col.casefold() in {
+                "tests",
+                "test",
+                "done",
+            }:
+                logger.info(
+                    "skip review move: %s/%s#%s already in %s",
+                    owner,
+                    repo,
+                    issue_number,
+                    current_col,
+                )
+                return
+
+            review_cfg = config.column("Review")
+            action: Any = review_cfg.on_success if review_cfg else None
+            if action is None:
+                target = _tests_column_name(option_names)
+                if target is None:
+                    logger.info(
+                        "skip review move: no Tests/Test option on %s/%s project",
+                        owner,
+                        repo,
+                    )
+                    return
+                action = MoveToAction(move_to=target)
+
+            ctx.project_id = project_id
+            ctx.status_field_id = field_id
+            ctx.status_options = options
+            ctx.item_node_id = item_id
+        except Exception:  # noqa: BLE001
+            logger.exception("project context for review move")
             return
         await runner.run_one(ctx, action)
 
@@ -1047,3 +1138,12 @@ def _closing_issue_number(body: str) -> int | None:
     if not match:
         return None
     return int(match.group(1))
+
+
+def _tests_column_name(option_names: set[str]) -> str | None:
+    """Prefer the board option named Tests, then Test (case-insensitive)."""
+    by_fold = {name.casefold(): name for name in option_names}
+    for candidate in ("tests", "test"):
+        if candidate in by_fold:
+            return by_fold[candidate]
+    return None
